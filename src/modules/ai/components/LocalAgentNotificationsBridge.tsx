@@ -5,7 +5,7 @@ import type { AgentStatus } from "@/modules/agents/lib/types";
 import { useEffect, useRef } from "react";
 import { useChatStore } from "../store/chatStore";
 
-const AGENT = "Terax";
+const AGENT = "Neira";
 
 type RunStatus =
   | "idle"
@@ -63,11 +63,11 @@ export function LocalAgentNotificationsBridge() {
       });
 
     if (status === "awaiting-approval") {
-      fire("attention", "Terax needs your approval", "Approve a tool to continue");
+      fire("attention", "Neira needs your approval", "Approve a tool to continue");
     } else if (status === "error") {
-      fire("error", "Terax run failed", error ?? undefined);
+      fire("error", "Neira run failed", error ?? undefined);
     } else if (status === "idle" && isBusy(was)) {
-      fire("finished", "Terax finished", "Your task is ready");
+      fire("finished", "Neira finished", "Your task is ready");
     }
   }, [status, error]);
 

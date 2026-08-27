@@ -6,9 +6,9 @@ import type { Theme } from "../types";
  * anything declared in `variants` would be dead and would drift. Empty
  * variants also let the settings swatch fall back to the live CSS vars.
  */
-export const teraxDefault: Theme = {
-  id: "terax-default",
-  name: "Terax Default",
+export const neiraDefault: Theme = {
+  id: "neira-default",
+  name: "Neira Default",
   description: "Clean neutral greys with a full-color terminal.",
   editorTheme: { dark: "github-dark", light: "github-light" },
   variants: {

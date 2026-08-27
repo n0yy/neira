@@ -1,34 +1,34 @@
-# terax-shell-integration (fish)
+# neira-shell-integration (fish)
 # Emits OSC 7 (cwd) + OSC 133 A/B/C/D so the host tracks cwd and prompt
 # boundaries without re-parsing the prompt. fish 4.0+ writes its own OSC 133
-# A/B (the `mark-prompt` feature); Terax disables it at spawn via
+# A/B (the `mark-prompt` feature); Neira disables it at spawn via
 # fish_features=no-mark-prompt so these markers aren't emitted twice.
 
-# Installed into conf.d, which every fish session sources; only Terax-spawned
-# shells (TERAX_TERMINAL=1) may get their prompt wrapped.
-if not set -q TERAX_TERMINAL
+# Installed into conf.d, which every fish session sources; only Neira-spawned
+# shells (NEIRA_TERMINAL=1) may get their prompt wrapped.
+if not set -q NEIRA_TERMINAL
     exit 0
 end
-if set -q __TERAX_HOOKS_LOADED
+if set -q __NEIRA_HOOKS_LOADED
     exit 0
 end
-set -g __TERAX_HOOKS_LOADED 1
+set -g __NEIRA_HOOKS_LOADED 1
 
-if set -q TERAX_CLI; and test -x "$TERAX_CLI"
-    function terax
-        command "$TERAX_CLI" $argv
+if set -q NEIRA_CLI; and test -x "$NEIRA_CLI"
+    function neira
+        command "$NEIRA_CLI" $argv
     end
 end
 
-# Terax is a clean terminal; drop fish's default startup greeting. A user who
+# Neira is a clean terminal; drop fish's default startup greeting. A user who
 # sets their own in config.fish (sourced after this) keeps it.
 function fish_greeting
 end
 
-set -g __TERAX_HOST (uname -n 2>/dev/null; or echo localhost)
+set -g __NEIRA_HOST (uname -n 2>/dev/null; or echo localhost)
 
 # URL-encode a path keeping `/` intact so it stays valid inside file://.
-function __terax_urlencode_path
+function __neira_urlencode_path
     set -l parts (string split '/' -- $argv[1])
     set -l out
     for p in $parts
@@ -41,49 +41,49 @@ function __terax_urlencode_path
     string join '/' $out
 end
 
-function __terax_restore_status
+function __neira_restore_status
     return $argv[1]
 end
 
-function __terax_capture_user_prompt
+function __neira_capture_user_prompt
     if not functions -q fish_prompt
         return
     end
-    if functions fish_prompt | string match -q '*__terax_user_prompt*'
+    if functions fish_prompt | string match -q '*__neira_user_prompt*'
         return
     end
-    functions -e __terax_user_prompt 2>/dev/null
-    functions -c fish_prompt __terax_user_prompt
+    functions -e __neira_user_prompt 2>/dev/null
+    functions -c fish_prompt __neira_user_prompt
 end
 
-# Wrapped so `fish -C __terax_install_prompt` can re-run it AFTER config.fish,
+# Wrapped so `fish -C __neira_install_prompt` can re-run it AFTER config.fish,
 # where a framework prompt (starship etc.) would otherwise override fish_prompt
 # and drop our markers.
-function __terax_install_prompt
+function __neira_install_prompt
     # ponytail: cover Conda's named wrapper; generalize if another prompt
-    # framework preserves Terax indirectly.
-    if not set -q TERAX_BLOCKS
+    # framework preserves Neira indirectly.
+    if not set -q NEIRA_BLOCKS
         and functions -q __fish_prompt_orig
         and functions fish_prompt | string match -q '*__fish_prompt_orig*'
-        and functions __fish_prompt_orig | string match -q '*__terax_user_prompt*'
+        and functions __fish_prompt_orig | string match -q '*__neira_user_prompt*'
         return
     end
-    __terax_capture_user_prompt
-    if set -q TERAX_BLOCKS
+    __neira_capture_user_prompt
+    if set -q NEIRA_BLOCKS
         function fish_right_prompt
         end
         function fish_greeting
         end
     end
     function fish_prompt
-        set -l __terax_status $status
-        printf '\e]133;D;%d\e\\' $__terax_status
-        printf '\e]7;file://%s%s\e\\' "$__TERAX_HOST" (__terax_urlencode_path "$PWD")
+        set -l __neira_status $status
+        printf '\e]133;D;%d\e\\' $__neira_status
+        printf '\e]7;file://%s%s\e\\' "$__NEIRA_HOST" (__neira_urlencode_path "$PWD")
         printf '\e]133;A\e\\'
         # Block mode: host renders its own input bar, so suppress the shell prompt
         # (B marker only) and reserve header/gap rows, mirroring zsh.
-        if set -q TERAX_BLOCKS
-            if set -q __terax_block_seen
+        if set -q NEIRA_BLOCKS
+            if set -q __neira_block_seen
                 printf '\n\n'
             else
                 printf '\n'
@@ -91,19 +91,19 @@ function __terax_install_prompt
             printf '\e]133;B\e\\'
             return
         end
-        __terax_restore_status $__terax_status
-        if functions -q __terax_user_prompt
-            __terax_user_prompt
+        __neira_restore_status $__neira_status
+        if functions -q __neira_user_prompt
+            __neira_user_prompt
         else
             printf '%s > ' (prompt_pwd)
         end
         printf '\e]133;B\e\\'
     end
 end
-__terax_install_prompt
+__neira_install_prompt
 
-function __terax_preexec --on-event fish_preexec
-    set -g __terax_block_seen 1
+function __neira_preexec --on-event fish_preexec
+    set -g __neira_block_seen 1
     set -l cmd (string replace -ra '[\x00-\x1f\x7f]' ' ' -- "$argv")
     printf '\e]133;C;%s\e\\' (string sub -l 256 -- "$cmd")
 end
