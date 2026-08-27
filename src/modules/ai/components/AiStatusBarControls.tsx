@@ -314,8 +314,9 @@ export function ModelDropdown() {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent
-        align="start"
-        className="w-[24rem] max-w-[min(24rem,calc(100vw-1rem))] p-0 overflow-hidden rounded-xl border border-border/70 shadow-xl"
+        align="center"
+        sideOffset={8}
+        className="w-[22rem] max-w-[min(22rem,calc(100vw-1rem))] p-0 overflow-hidden rounded-xl border border-border/70 shadow-xl"
         onFocusCapture={(e) => {
           if (e.target !== inputRef.current) inputRef.current?.focus();
         }}
