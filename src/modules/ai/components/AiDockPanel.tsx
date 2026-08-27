@@ -1,0 +1,240 @@
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useChat, type UIMessage } from "@ai-sdk/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, Delete02Icon, Add01Icon, ArrowUpIcon, StopCircleIcon, Mic01Icon } from "@hugeicons/core-free-icons";
+import { lazy, Suspense, useMemo, useRef } from "react";
+import { getModel, type ModelId } from "../config";
+import { useComposer, ACCEPTED_FILES } from "../lib/composer";
+import { getOrCreateChat } from "../store/chatRuntime";
+import { useChatStore } from "../store/chatStore";
+import { AiChatView } from "./AiChat";
+import { AiInputBarConnect } from "./AiInputBar";
+import { ChipsRow } from "./ChipsRow";
+import { TodoStrip } from "./TodoStrip";
+import { Spinner } from "@/components/ui/spinner";
+
+const AiComposerInputLazy = lazy(() => import("./AiComposerInput").then((m) => ({ default: m.AiComposerInput })));
+
+type Props = {
+  onCollapse: () => void;
+  onClose: () => void;
+  hasComposer: boolean;
+};
+
+export function AiDockPanel({ onCollapse, onClose, hasComposer }: Props) {
+  const sessionId = useChatStore((s) => s.activeSessionId);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-card">
+      <Header onCollapse={onCollapse} onClose={onClose} />
+      <PlanModeStrip />
+      <div className="flex min-h-0 flex-1 flex-col">
+        {sessionId ? <ChatBody sessionId={sessionId} /> : <EmptySessionShell />}
+      </div>
+      <ComposerFooter hasComposer={hasComposer} />
+    </div>
+  );
+}
+
+function PlanModeStrip() {
+  return null;
+}
+
+function ChatBody({ sessionId }: { sessionId: string }) {
+  const chat = useMemo(() => getOrCreateChat(sessionId), [sessionId]);
+  const helpers = useChat<UIMessage>({ chat });
+  const isBusy = helpers.status === "submitted" || helpers.status === "streaming";
+
+  // Auto-focus handling is via composer focusSignal, not here.
+
+  if (helpers.messages.length === 0) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-10 text-center">
+          <img src="/logo.png" alt="Neira" className="size-14 opacity-90" />
+          <div className="space-y-1.5">
+            <p className="text-[14px] font-semibold tracking-tight">Ask Neira anything</p>
+            <p className="max-w-[18rem] text-[11.5px] leading-relaxed text-muted-foreground">
+              Neira sees the active terminal — cwd, recent commands, and output.
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-2.5">
+            {[
+              { label: "Explain the last error", text: "Explain the last error in the terminal." },
+              { label: "Generate a command", text: "Give me a command to " },
+              { label: "Summarize buffer", text: "Summarize what just happened in the terminal." },
+            ].map((s) => (
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => useChatStore.getState().focusInput(s.text)}
+                className="flex items-center gap-2.5 rounded-lg border border-border bg-card/70 px-2.5 py-2 text-left transition-colors hover:bg-muted/50"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12px] font-medium text-foreground">{s.label}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Still show composer below via parent; this is just empty chat */}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col [&_.text-sm]:text-[12px]">
+      <AiChatView
+        messages={helpers.messages}
+        status={helpers.status}
+        error={helpers.error}
+        clearError={helpers.clearError}
+        addToolApprovalResponse={helpers.addToolApprovalResponse}
+        stop={helpers.stop}
+      />
+      {/* Inline busy indicator is handled inside AiChatView */}
+      {isBusy ? null : null}
+    </div>
+  );
+}
+
+function EmptySessionShell() {
+  return (
+    <div className="flex flex-1 items-center justify-center text-[11px] text-muted-foreground">
+      Loading sessions…
+    </div>
+  );
+}
+
+function Header({ onCollapse, onClose }: { onCollapse: () => void; onClose: () => void }) {
+  const selectedModelId = useChatStore((s) => s.selectedModelId);
+  const modelLabel = useMemo(() => {
+    try {
+      return getModel(selectedModelId as ModelId).label;
+    } catch {
+      return selectedModelId;
+    }
+  }, [selectedModelId]);
+  const deleteSession = useChatStore((s) => s.deleteSession);
+  const activeId = useChatStore((s) => s.activeSessionId);
+
+  return (
+    <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="text-[12px] font-semibold tracking-tight">Neira AI</span>
+        <span className="hidden truncate rounded bg-muted px-1.5 py-0.5 text-[10.5px] text-muted-foreground sm:inline">
+          {modelLabel}
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {activeId ? (
+          <Button type="button" size="icon" variant="ghost" className="size-6" title="Clear conversation" aria-label="Clear conversation" onClick={() => deleteSession(activeId)}>
+            <HugeiconsIcon icon={Delete02Icon} size={12} strokeWidth={1.75} />
+          </Button>
+        ) : null}
+        <Button type="button" size="icon" variant="ghost" className="size-6" title="Collapse panel" aria-label="Collapse panel" onClick={onCollapse}>
+          <span className="text-[12px]">‹</span>
+        </Button>
+        <Button type="button" size="icon" variant="ghost" className="size-5" aria-label="Close" title="Close" onClick={onClose}>
+          <HugeiconsIcon icon={Cancel01Icon} size={11} strokeWidth={1.75} />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ComposerFooter({ hasComposer }: { hasComposer: boolean }) {
+  const c = useComposer();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const sessionId = useChatStore((s) => s.activeSessionId);
+  const hasKeys = useChatStore((s) => {
+    const keys = s.apiKeys;
+    return Object.values(keys).some((v) => typeof v === "string" && v.length > 0);
+  });
+  const showConnect = !hasComposer || !hasKeys;
+
+  return (
+    <div className="shrink-0 border-t border-border/60 bg-card p-2.5">
+      {showConnect ? (
+        <div className="mb-2">
+          <AiInputBarConnect onAdd={() => {}} />
+        </div>
+      ) : null}
+      <TodoStrip sessionId={sessionId ?? ""} />
+      <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 px-2 py-2">
+        <ChipsRow
+          files={c.files}
+          onRemoveFile={c.removeFile}
+          snippets={c.pickedSnippets}
+          onRemoveSnippet={(id) => {
+            const snip = c.pickedSnippets.find((s) => s.id === id);
+            c.removeSnippet(id);
+            if (!snip) return;
+            const re = new RegExp(`(^|\\s)#${snip.handle}\\b ?`);
+            c.setValue((v) => v.replace(re, (_m, lead: string) => lead));
+          }}
+          commands={c.pickedCommands}
+          onRemoveCommand={(name) => c.removeCommand(name)}
+        />
+        <div className="relative min-w-0 flex-1">
+          {/* Lazy AiComposerInput */}
+          <ComposerTextarea />
+        </div>
+        <div className="flex items-center gap-1">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={ACCEPTED_FILES}
+            className="hidden"
+            onChange={(e) => {
+              void c.addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <Button type="button" variant="ghost" size="icon" className="size-6" title="Attach file" onClick={() => fileInputRef.current?.click()} disabled={c.isBusy}>
+            <HugeiconsIcon icon={Add01Icon} size={13} strokeWidth={1.75} />
+          </Button>
+          {c.voice.supported ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn("size-6", c.voice.recording && "bg-destructive/10 text-destructive")}
+              title={c.voice.recording ? "Stop & transcribe" : c.voice.transcribing ? "Transcribing…" : "Voice input"}
+              onClick={() => (c.voice.recording ? c.voice.stop() : void c.voice.start())}
+              disabled={c.isBusy || c.voice.transcribing || !c.voice.hasKey}
+            >
+              {c.voice.recording ? (
+                <span className="size-2 animate-pulse rounded-full bg-destructive" />
+              ) : c.voice.transcribing ? (
+                <Spinner className="size-3" />
+              ) : (
+                <HugeiconsIcon icon={Mic01Icon} size={13} strokeWidth={1.75} />
+              )}
+            </Button>
+          ) : null}
+          <span className="flex-1" />
+          {c.isBusy ? (
+            <Button type="button" size="icon" variant="ghost" className="size-6" aria-label="Stop" onClick={c.stop}>
+              <HugeiconsIcon icon={StopCircleIcon} size={13} strokeWidth={1.75} />
+            </Button>
+          ) : (
+            <Button type="button" size="icon" onClick={c.submit} disabled={!c.canSend} className="h-6 w-8" aria-label="Send" title="Send (Enter)">
+              <HugeiconsIcon icon={ArrowUpIcon} size={13} strokeWidth={1.75} />
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ComposerTextarea() {
+  return (
+    <Suspense fallback={<div className="h-10 rounded bg-muted/30" />}>
+      <AiComposerInputLazy />
+    </Suspense>
+  );
+}

@@ -19,7 +19,6 @@ import {
 } from "@/modules/agents";
 import {
   AgentRunBridge,
-  AiMiniWindow,
   LocalAgentNotificationsBridge,
   SelectionAskAi,
   useAiBootstrap,
@@ -28,6 +27,12 @@ import {
   useSelectionAskAi,
 } from "@/modules/ai";
 import { AiComposerProvider } from "@/modules/ai/lib/composer";
+import { AiDockPanel } from "@/modules/ai/components/lazy";
+import {
+  AI_DOCK_MAX_WIDTH,
+  AI_DOCK_MIN_WIDTH,
+} from "@/modules/ai/lib/aiDockGeometry";
+import { useAiDockPanel } from "@/modules/ai/lib/useAiDockPanel";
 import { native } from "@/modules/ai/lib/native";
 import { CommandPalette, createCommandItems } from "@/modules/command-palette";
 import { useControlBridge } from "@/modules/control";
@@ -113,6 +118,8 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { SearchAddon } from "@xterm/addon-search";
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -121,11 +128,11 @@ import {
   useState,
 } from "react";
 import { CloseDialogs } from "./components/CloseDialogs";
-import {
-  TOGGLE_BLOCK_INPUT_EVENT,
-  WorkspaceInputBar,
-} from "./components/WorkspaceInputBar";
+import { TOGGLE_BLOCK_INPUT_EVENT } from "./components/WorkspaceInputBar";
 import { WorkspaceSurface } from "./components/WorkspaceSurface";
+import { useBlockController } from "@/modules/terminal/lib/blockController";
+
+const ShellInput = lazy(() => import("@/modules/terminal/block/ShellInput"));
 import { useAppCloseGuard } from "./hooks/useAppCloseGuard";
 import { useTabCloseGuards } from "./hooks/useTabCloseGuards";
 import { useWorkspaceSwitcher } from "./hooks/useWorkspaceSwitcher";
@@ -329,23 +336,30 @@ export default function App() {
     },
     [],
   );
-  const miniOpen = useChatStore((s) => s.mini.open);
-  const miniPresence = usePresence(miniOpen, 200);
-  const openMini = useChatStore((s) => s.openMini);
-  const toggleMini = useChatStore((s) => s.toggleMini);
   const focusInput = useChatStore((s) => s.focusInput);
   const openPanel = useChatStore((s) => s.openPanel);
-  const panelOpen = useChatStore((s) => s.panelOpen);
   const setLive = useChatStore((s) => s.setLive);
+  const {
+    aiDockRef,
+    aiDockWidthRef,
+    initialAiDockCollapsed,
+    persistAiDockCollapsed,
+    persistAiDockWidth,
+    toggleAiDock,
+    expandAiDock,
+    collapseAiDock,
+  } = useAiDockPanel();
   const respondToApproval = useChatStore((s) => s.respondToApproval);
 
-  const { hasComposer, keysLoaded } = useAiBootstrap();
+  const { hasComposer } = useAiBootstrap();
 
   const activeTab = tabs.find((t) => t.id === activeId);
   const isTerminalTab = activeTab?.kind === "terminal";
   const isBlockTab = activeTerminalTab?.blocks === true;
   const isEditorTab = activeTab?.kind === "editor";
   const isGitHistoryTab = activeTab?.kind === "git-history";
+  const blockController = useBlockController(isBlockTab ? activeLeafId : null);
+  const blockMode = blockController?.blockMode ?? "prompt";
 
   useEditorFileSync({ tabs, tabsRef, editorRefs });
   useThemeFileEditing({ tabsRef, openFileTab });
@@ -511,13 +525,17 @@ export default function App() {
       void openSettingsWindow("models");
       return;
     }
-    if (panelOpen) {
-      useChatStore.getState().closePanel();
-    } else {
+    const dock = aiDockRef.current;
+    const isCollapsed = dock ? dock.getSize().asPercentage <= 0 : initialAiDockCollapsed;
+    if (isCollapsed) {
+      expandAiDock();
       openPanel();
       focusInput(null);
+    } else {
+      collapseAiDock();
+      persistAiDockCollapsed(true);
     }
-  }, [hasComposer, panelOpen, openPanel, focusInput]);
+  }, [hasComposer, aiDockRef, initialAiDockCollapsed, expandAiDock, collapseAiDock, openPanel, focusInput, persistAiDockCollapsed]);
 
   const attachSelection = useChatStore((s) => s.attachSelection);
 
@@ -527,15 +545,14 @@ export default function App() {
         void openSettingsWindow("models");
         return;
       }
-      // Dispatch a window event the composer listens for. Same pattern as
-      // selections — keeps file-explorer decoupled from the AI module.
       window.dispatchEvent(
         new CustomEvent<string>("neira:ai-attach-file", { detail: path }),
       );
+      expandAiDock();
       openPanel();
       focusInput(null);
     },
-    [hasComposer, openPanel, focusInput],
+    [hasComposer, openPanel, focusInput, expandAiDock],
   );
 
   const askFromSelection = useCallback(() => {
@@ -901,7 +918,8 @@ export default function App() {
           void openSettingsWindow("models");
           return;
         }
-        toggleMini();
+        // Mini floating removed — repurpose Shift+Cmd+I to also toggle dock
+        toggleAiDock();
       },
       "ai.askSelection": onAskFromSelection,
       "agent.focusAttention": () => {
@@ -941,7 +959,7 @@ export default function App() {
       toggleSourceControl,
       hasComposer,
       togglePanelAndFocus,
-      toggleMini,
+      toggleAiDock,
       onAskFromSelection,
       toggleSidebar,
       toggleExplorerFocus,
@@ -1073,9 +1091,10 @@ export default function App() {
   const onActivateAgent = activateAgentTarget;
 
   const onActivateLocalAgent = useCallback(() => {
+    expandAiDock();
     openPanel();
     focusInput(null);
-  }, [openPanel, focusInput]);
+  }, [openPanel, focusInput, expandAiDock]);
 
   const handleLeafExit = useCallback(
     (leafId: number, _code: number) => {
@@ -1396,8 +1415,10 @@ export default function App() {
               orientation="horizontal"
               className="min-h-0 flex-1"
               onLayoutChanged={(_, { isUserInteraction }) => {
-                const width = sidebarRef.current?.getSize().inPixels ?? 0;
-                persistSidebarWidth(width, isUserInteraction);
+                const sidebarW = sidebarRef.current?.getSize().inPixels ?? 0;
+                persistSidebarWidth(sidebarW, isUserInteraction);
+                const aiW = aiDockRef.current?.getSize().inPixels ?? 0;
+                persistAiDockWidth(aiW, isUserInteraction);
               }}
             >
               <ResizablePanel
@@ -1465,8 +1486,8 @@ export default function App() {
                 </div>
               </ResizablePanel>
               <ResizableHandle className="w-1 rounded-full bg-transparent transition-colors duration-[var(--dur-fast)] after:w-4 hover:bg-border" />
-              <ResizablePanel id="workspace" defaultSize="78%" minSize="30%">
-                <div className="h-full min-h-0 pl-0.5 pr-2">
+              <ResizablePanel id="workspace" defaultSize="58%" minSize="30%">
+                <div className="h-full min-h-0 pl-0.5 pr-0.5">
                   <div className="neira-pane flex h-full min-h-0 flex-col">
                     <div className="relative min-h-0 flex-1">
                       <WorkspaceSurface
@@ -1490,17 +1511,44 @@ export default function App() {
                         onSetMarkdownView={setMarkdownView}
                       />
                     </div>
-
-                    <WorkspaceInputBar
-                      isBlockTab={isBlockTab}
-                      isTerminalTab={isTerminalTab}
-                      activeLeafId={activeLeafId}
-                      cwd={activeCwd}
-                      home={home}
+                    {isBlockTab && activeLeafId != null && blockController ? (
+                      <div className="shrink-0 border-t border-border/60 bg-foreground/[0.02] px-3 py-2">
+                        <Suspense fallback={null}>
+                          <ShellInput
+                            leafId={activeLeafId}
+                            mode={blockMode}
+                            focused
+                            onSubmit={blockController.submitCommand}
+                            onInterrupt={blockController.interrupt}
+                            getCwd={blockController.getCwd}
+                          />
+                        </Suspense>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </ResizablePanel>
+              <ResizableHandle className="w-1 rounded-full bg-transparent transition-colors duration-[var(--dur-fast)] after:w-4 hover:bg-border" />
+              <ResizablePanel
+                id="ai-dock"
+                panelRef={aiDockRef}
+                defaultSize={
+                  initialAiDockCollapsed ? "0px" : `${aiDockWidthRef.current}px`
+                }
+                minSize={`${AI_DOCK_MIN_WIDTH}px`}
+                maxSize={`${AI_DOCK_MAX_WIDTH}px`}
+                collapsible
+                collapsedSize={0}
+                onResize={(size) => {
+                  persistAiDockCollapsed(size.inPixels <= 0);
+                }}
+              >
+                <div className="h-full min-h-0 pl-0.5 pr-2">
+                  <div className="neira-pane flex h-full min-h-0 flex-col overflow-hidden border-l border-border/40">
+                    <AiDockPanel
                       hasComposer={hasComposer}
-                      panelOpen={panelOpen}
-                      keysLoaded={keysLoaded}
-                      onConnect={() => void openSettingsWindow("models")}
+                      onCollapse={collapseAiDock}
+                      onClose={collapseAiDock}
                     />
                   </div>
                 </div>
@@ -1515,7 +1563,7 @@ export default function App() {
               home={home}
               onCd={sendCd}
               onWorkspaceChange={handleWorkspaceChange}
-              onOpenMini={openMini}
+              onOpenMini={expandAiDock}
               onOpenAi={togglePanelAndFocus}
               hasComposer={hasComposer}
               privateActive={
@@ -1543,9 +1591,6 @@ export default function App() {
             </>
           ) : null}
 
-          {hasComposer && miniPresence.mounted ? (
-            <AiMiniWindow state={miniPresence.state} />
-          ) : null}
           {askPresence.mounted ? (
             <SelectionAskAi
               state={askPresence.state}
