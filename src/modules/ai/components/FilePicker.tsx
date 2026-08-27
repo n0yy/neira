@@ -37,11 +37,12 @@ export function FilePickerContent({
       side="top"
       align="start"
       sideOffset={8}
-      avoidCollisions={false}
+      collisionPadding={12}
+      sticky="always"
       onOpenAutoFocus={(e) => e.preventDefault()}
       onCloseAutoFocus={(e) => e.preventDefault()}
       onMouseDown={(e) => e.preventDefault()}
-      className="w-80 max-w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-lg border border-border/60 bg-popover/95 p-0 shadow-xl backdrop-blur-xl"
+      className="w-80 overflow-hidden rounded-lg border border-border/60 bg-popover/95 p-0 shadow-xl backdrop-blur-xl"
     >
       <div className="border-b border-border/60 px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
         Workspace files
@@ -61,7 +62,7 @@ export function FilePickerContent({
         </div>
       ) : (
         <>
-          <div ref={listRef} className="max-h-[min(16rem,40vh)] overflow-y-auto py-1 overscroll-contain">
+          <div ref={listRef} className="max-h-64 overflow-y-auto py-1">
             {files.map((path, idx) => {
               const slash = path.lastIndexOf("/");
               const name = slash === -1 ? path : path.slice(slash + 1);
