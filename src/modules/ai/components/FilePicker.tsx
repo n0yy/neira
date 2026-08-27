@@ -1,4 +1,3 @@
-import { PopoverContent } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { fileIconUrl } from "@/modules/explorer/lib/iconResolver";
@@ -33,16 +32,9 @@ export function FilePickerContent({
   }, [activeIndex]);
 
   return (
-    <PopoverContent
-      side="top"
-      align="start"
-      alignOffset={0}
-      sideOffset={12}
-      avoidCollisions={false}
-      onOpenAutoFocus={(e) => e.preventDefault()}
-      onCloseAutoFocus={(e) => e.preventDefault()}
+    <div
       onMouseDown={(e) => e.preventDefault()}
-      className="z-[100] w-80 overflow-hidden rounded-lg border border-border/60 bg-popover p-0 shadow-xl"
+      className="w-80 overflow-hidden rounded-lg border border-border/60 bg-popover p-0 shadow-xl"
     >
       <div className="border-b border-border/60 px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
         Workspace files
@@ -105,6 +97,6 @@ export function FilePickerContent({
           )}
         </>
       )}
-    </PopoverContent>
+    </div>
   );
 }

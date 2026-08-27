@@ -1,4 +1,3 @@
-import { Popover, PopoverAnchor } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { usePresence } from "@/lib/usePresence";
@@ -207,9 +206,8 @@ export function AiComposerInput() {
 
   return (
     <>
-      <Popover open={pickerOpen}>
-        <PopoverAnchor asChild>
-          <div className="flex items-start gap-2">
+      <div className="relative">
+        <div className="flex items-start gap-2">
             <textarea
               ref={c.textareaRef}
               value={c.value}
@@ -266,26 +264,29 @@ export function AiComposerInput() {
             />
             <AgentSwitcher />
           </div>
-        </PopoverAnchor>
-        {fileTrigger ? (
-          <FilePickerContent
-            files={filteredFiles}
-            activeIndex={activeIndex}
-            indexing={workspaceFiles.indexing}
-            truncated={workspaceFiles.truncated}
-            hasWorkspace={workspaceRoot !== null}
-            onPick={(f) => void onPickFile(f)}
-            onHover={setActiveIndex}
-          />
-        ) : (
-          <SnippetPickerContent
-            items={filteredItems}
-            activeIndex={activeIndex}
-            onPick={onPickItem}
-            onHover={setActiveIndex}
-          />
+        {pickerOpen && (
+          <div className="absolute bottom-full left-0 z-50 mb-2">
+            {fileTrigger ? (
+              <FilePickerContent
+                files={filteredFiles}
+                activeIndex={activeIndex}
+                indexing={workspaceFiles.indexing}
+                truncated={workspaceFiles.truncated}
+                hasWorkspace={workspaceRoot !== null}
+                onPick={(f) => void onPickFile(f)}
+                onHover={setActiveIndex}
+              />
+            ) : (
+              <SnippetPickerContent
+                items={filteredItems}
+                activeIndex={activeIndex}
+                onPick={onPickItem}
+                onHover={setActiveIndex}
+              />
+            )}
+          </div>
         )}
-      </Popover>
+      </div>
 
       {voiceRow.mounted && (
         <div data-state={voiceRow.state} className="neira-reveal">

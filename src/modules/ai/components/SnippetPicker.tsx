@@ -1,4 +1,3 @@
-import { PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { SlashCommandMeta } from "../lib/slashCommands";
@@ -26,16 +25,9 @@ export function SnippetPickerContent({
   let cursor = -1;
 
   return (
-    <PopoverContent
-      side="top"
-      align="start"
-      alignOffset={0}
-      sideOffset={12}
-      avoidCollisions={false}
-      onOpenAutoFocus={(e) => e.preventDefault()}
-      onCloseAutoFocus={(e) => e.preventDefault()}
+    <div
       onMouseDown={(e) => e.preventDefault()}
-      className="z-[100] w-72 overflow-hidden rounded-lg border border-border/60 bg-popover p-0 shadow-xl"
+      className="w-72 overflow-hidden rounded-lg border border-border/60 bg-popover p-0 shadow-xl"
     >
       {items.length === 0 ? (
         <div className="px-3 py-2.5 text-[11px] text-muted-foreground">
@@ -128,7 +120,7 @@ export function SnippetPickerContent({
           )}
         </div>
       )}
-    </PopoverContent>
+    </div>
   );
 }
 
