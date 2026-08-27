@@ -29,18 +29,19 @@ export function SnippetPickerContent({
     <PopoverContent
       side="top"
       align="start"
-      sideOffset={6}
+      sideOffset={8}
+      avoidCollisions={false}
       onOpenAutoFocus={(e) => e.preventDefault()}
       onCloseAutoFocus={(e) => e.preventDefault()}
       onMouseDown={(e) => e.preventDefault()}
-      className="w-72 overflow-hidden rounded-lg border border-border/60 bg-popover/95 p-0 shadow-xl backdrop-blur-xl"
+      className="w-72 max-w-[min(18rem,calc(100vw-1rem))] overflow-hidden rounded-lg border border-border/60 bg-popover/95 p-0 shadow-xl backdrop-blur-xl"
     >
       {items.length === 0 ? (
         <div className="px-3 py-2.5 text-[11px] text-muted-foreground">
           No matches. Add snippets in Settings → Agents.
         </div>
       ) : (
-        <div className="max-h-64 overflow-y-auto py-1">
+        <div className="max-h-[min(16rem,40vh)] overflow-y-auto py-1 overscroll-contain">
           {commands.length > 0 && (
             <>
               <SectionHeader label="Pre-built snippets" />
