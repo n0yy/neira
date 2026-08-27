@@ -1,10 +1,12 @@
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
 import { fmtShortcut, MOD_KEY } from "@/lib/platform";
@@ -220,6 +222,7 @@ export function ModelDropdown() {
   const [search, setSearch] = useState("");
   const [activeProvider, setActiveProvider] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("all");
+  const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const currentProviderHasKey = isCompatModelId(selected)
     ? true
@@ -285,14 +288,14 @@ export function ModelDropdown() {
   }, [activeProvider, allModels, favoriteIds, recentIds, search, tab]);
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
         <Button
           type="button"
           variant="ghost"
           size="sm"
           className={cn(
-            "h-5.5 gap-1 rounded-md px-1.5 my-1 text-xs hover:bg-accent hover:text-foreground",
+            "h-5.5 justify-center gap-1 truncate rounded-md px-1.5 my-1 text-xs hover:bg-accent hover:text-foreground",
             currentProviderHasKey
               ? "text-muted-foreground"
               : "text-amber-600 dark:text-amber-400",
@@ -303,22 +306,28 @@ export function ModelDropdown() {
               : `${current.label} — no key configured`
           }
         >
-          {current.label}
+          <span className="truncate">{current.label}</span>
           <HugeiconsIcon
             icon={ArrowDown01Icon}
             size={11}
             strokeWidth={2}
-            className="opacity-70"
+            className="shrink-0 opacity-70"
           />
         </Button>
-      </DropdownMenuTrigger>
+      </DialogTrigger>
 
-      <DropdownMenuContent
-        align="center"
-        sideOffset={8}
-        className="w-[22rem] max-w-[min(22rem,calc(100vw-1rem))] p-0 overflow-hidden rounded-xl border border-border/70 shadow-xl"
-        onFocusCapture={(e) => {
-          if (e.target !== inputRef.current) inputRef.current?.focus();
+      <DialogHeader className="sr-only">
+        <DialogTitle>Select model</DialogTitle>
+        <DialogDescription>
+          Search and choose an AI model or provider.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogContent
+        showCloseButton={false}
+        className="w-[50%] gap-0 overflow-hidden rounded-xl p-0"
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          inputRef.current?.focus();
         }}
       >
         {/* Search */}
@@ -333,7 +342,6 @@ export function ModelDropdown() {
             ref={inputRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.stopPropagation()}
             placeholder="Search models, providers, capabilities…"
             className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground/60"
           />
@@ -363,7 +371,7 @@ export function ModelDropdown() {
           />
         </div>
 
-        <div className="flex max-h-104 min-h-0">
+        <div className="flex max-h-[50vh] min-h-0">
           {/* Provider sidebar — configured first, unconfigured muted, no dividers. */}
           <div className="flex w-11 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border/70 bg-muted/20 py-1.5">
             <ProviderPill
@@ -448,8 +456,8 @@ export function ModelDropdown() {
             )}
           </div>
         </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -573,14 +581,23 @@ function ModelRow({
   onToggleFavorite: () => void;
 }) {
   return (
-    <DropdownMenuItem
-      onSelect={(e) => {
-        e.preventDefault();
-        onPick();
+    <div
+      role="option"
+      aria-selected={selected}
+      tabIndex={0}
+      onClick={onPick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPick();
+        }
       }}
       className={cn(
-        "group mx-1 my-0.5 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5",
-        selected ? "bg-accent/60 text-foreground" : "text-foreground/85",
+        "group mx-1 my-0.5 flex cursor-pointer items-start gap-2 rounded-md px-2.5 py-2 outline-none",
+        selected
+          ? "bg-accent/60 text-foreground"
+          : "text-foreground/85 hover:bg-accent/40",
+        "focus-visible:bg-accent/60",
         !hasKey && "opacity-60",
       )}
     >
@@ -593,7 +610,7 @@ function ModelRow({
         }}
         title={favorite ? "Unfavorite" : "Favorite"}
         className={cn(
-          "shrink-0 rounded p-0.5 transition-colors",
+          "mt-0.5 shrink-0 rounded p-0.5 transition-colors",
           favorite
             ? "text-amber-500"
             : "text-muted-foreground/40 hover:text-amber-500",
@@ -612,30 +629,30 @@ function ModelRow({
           icon={PROVIDER_ICON[model.provider]}
           size={13}
           strokeWidth={1.5}
-          className="shrink-0 text-muted-foreground/70"
+          className="mt-0.5 shrink-0 text-muted-foreground/70"
         />
       ) : null}
 
-      <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
-        <span className="shrink-0 text-[12px] font-medium leading-none">
-          {model.label}
-        </span>
-        <span className="truncate text-[10.5px] leading-none text-muted-foreground">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-none">
+            {model.label}
+          </span>
+          <CapabilityBars caps={model.capabilities} />
+          {selected ? (
+            <HugeiconsIcon
+              icon={Tick01Icon}
+              size={13}
+              strokeWidth={2}
+              className="shrink-0 text-foreground"
+            />
+          ) : null}
+        </div>
+        <p className="mt-0.5 line-clamp-2 text-[10.5px] leading-snug text-muted-foreground">
           {model.description}
-        </span>
+        </p>
       </div>
-
-      <CapabilityBars caps={model.capabilities} />
-
-      {selected ? (
-        <HugeiconsIcon
-          icon={Tick01Icon}
-          size={13}
-          strokeWidth={2}
-          className="shrink-0 text-foreground"
-        />
-      ) : null}
-    </DropdownMenuItem>
+    </div>
   );
 }
 

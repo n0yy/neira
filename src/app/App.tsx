@@ -534,6 +534,7 @@ export default function App() {
     } else {
       collapseAiDock();
       persistAiDockCollapsed(true);
+      useChatStore.getState().closePanel();
     }
   }, [hasComposer, aiDockRef, initialAiDockCollapsed, expandAiDock, collapseAiDock, openPanel, focusInput, persistAiDockCollapsed]);
 
@@ -1547,7 +1548,6 @@ export default function App() {
                   <div className="neira-pane flex h-full min-h-0 flex-col overflow-hidden border-l border-border/40">
                     <AiDockPanel
                       hasComposer={hasComposer}
-                      onCollapse={collapseAiDock}
                       onClose={collapseAiDock}
                     />
                   </div>

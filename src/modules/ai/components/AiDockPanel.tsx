@@ -17,17 +17,16 @@ import { ModelDropdown } from "./AiStatusBarControls";
 const AiComposerInputLazy = lazy(() => import("./AiComposerInput").then((m) => ({ default: m.AiComposerInput })));
 
 type Props = {
-  onCollapse: () => void;
   onClose: () => void;
   hasComposer: boolean;
 };
 
-export function AiDockPanel({ onCollapse, onClose, hasComposer }: Props) {
+export function AiDockPanel({ onClose, hasComposer }: Props) {
   const sessionId = useChatStore((s) => s.activeSessionId);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
-      <Header onCollapse={onCollapse} onClose={onClose} />
+      <Header onClose={onClose} />
       <PlanModeStrip />
       <div className="flex min-h-0 flex-1 flex-col">
         {sessionId ? <ChatBody sessionId={sessionId} /> : <EmptySessionShell />}
@@ -107,7 +106,7 @@ function EmptySessionShell() {
   );
 }
 
-function Header({ onCollapse, onClose }: { onCollapse: () => void; onClose: () => void }) {
+function Header({ onClose }: { onClose: () => void }) {
   const deleteSession = useChatStore((s) => s.deleteSession);
   const activeId = useChatStore((s) => s.activeSessionId);
 
@@ -123,9 +122,6 @@ function Header({ onCollapse, onClose }: { onCollapse: () => void; onClose: () =
             <HugeiconsIcon icon={Delete02Icon} size={12} strokeWidth={1.75} />
           </Button>
         ) : null}
-        <Button type="button" size="icon" variant="ghost" className="size-6" title="Collapse panel" aria-label="Collapse panel" onClick={onCollapse}>
-          <span className="text-[12px]">‹</span>
-        </Button>
         <Button type="button" size="icon" variant="ghost" className="size-5" aria-label="Close" title="Close" onClick={onClose}>
           <HugeiconsIcon icon={Cancel01Icon} size={11} strokeWidth={1.75} />
         </Button>

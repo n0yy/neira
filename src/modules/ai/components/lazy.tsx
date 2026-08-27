@@ -39,7 +39,7 @@ export function AiMiniWindow({ state }: { state: PresenceState }) {
   );
 }
 
-export function AiDockPanel(props: { hasComposer: boolean; onCollapse: () => void; onClose: () => void }) {
+export function AiDockPanel(props: { hasComposer: boolean; onClose: () => void }) {
   return (
     <Suspense fallback={null}>
       <AiDockPanelInner {...props} />
