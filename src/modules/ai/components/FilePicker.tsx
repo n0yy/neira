@@ -37,8 +37,7 @@ export function FilePickerContent({
       side="top"
       align="start"
       sideOffset={8}
-      collisionPadding={12}
-      sticky="always"
+      avoidCollisions={false}
       onOpenAutoFocus={(e) => e.preventDefault()}
       onCloseAutoFocus={(e) => e.preventDefault()}
       onMouseDown={(e) => e.preventDefault()}
