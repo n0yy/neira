@@ -4,15 +4,15 @@ import { useChat, type UIMessage } from "@ai-sdk/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Delete02Icon, Add01Icon, ArrowUpIcon, StopCircleIcon, Mic01Icon } from "@hugeicons/core-free-icons";
 import { lazy, Suspense, useMemo, useRef } from "react";
-import { getModel, type ModelId } from "../config";
 import { useComposer, ACCEPTED_FILES } from "../lib/composer";
 import { getOrCreateChat } from "../store/chatRuntime";
 import { useChatStore } from "../store/chatStore";
 import { AiChatView } from "./AiChat";
-import { AiInputBarConnect } from "./AiInputBar";
 import { ChipsRow } from "./ChipsRow";
 import { TodoStrip } from "./TodoStrip";
 import { Spinner } from "@/components/ui/spinner";
+import { AgentSwitcher } from "./AgentSwitcher";
+import { ModelDropdown } from "./AiStatusBarControls";
 
 const AiComposerInputLazy = lazy(() => import("./AiComposerInput").then((m) => ({ default: m.AiComposerInput })));
 
@@ -108,24 +108,14 @@ function EmptySessionShell() {
 }
 
 function Header({ onCollapse, onClose }: { onCollapse: () => void; onClose: () => void }) {
-  const selectedModelId = useChatStore((s) => s.selectedModelId);
-  const modelLabel = useMemo(() => {
-    try {
-      return getModel(selectedModelId as ModelId).label;
-    } catch {
-      return selectedModelId;
-    }
-  }, [selectedModelId]);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const activeId = useChatStore((s) => s.activeSessionId);
 
   return (
-    <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="text-[12px] font-semibold tracking-tight">Neira AI</span>
-        <span className="hidden truncate rounded bg-muted px-1.5 py-0.5 text-[10.5px] text-muted-foreground sm:inline">
-          {modelLabel}
-        </span>
+    <div className="flex h-11 shrink-0 items-center justify-between gap-1 border-b border-border/60 px-2">
+      <div className="flex min-w-0 items-center gap-1">
+        <AgentSwitcher />
+        <ModelDropdown />
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {activeId ? (
@@ -144,23 +134,14 @@ function Header({ onCollapse, onClose }: { onCollapse: () => void; onClose: () =
   );
 }
 
-function ComposerFooter({ hasComposer }: { hasComposer: boolean }) {
+function ComposerFooter({ hasComposer: _hasComposer }: { hasComposer: boolean }) {
+  void _hasComposer;
   const c = useComposer();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sessionId = useChatStore((s) => s.activeSessionId);
-  const hasKeys = useChatStore((s) => {
-    const keys = s.apiKeys;
-    return Object.values(keys).some((v) => typeof v === "string" && v.length > 0);
-  });
-  const showConnect = !hasComposer || !hasKeys;
 
   return (
     <div className="shrink-0 border-t border-border/60 bg-card p-2.5">
-      {showConnect ? (
-        <div className="mb-2">
-          <AiInputBarConnect onAdd={() => {}} />
-        </div>
-      ) : null}
       <TodoStrip sessionId={sessionId ?? ""} />
       <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 px-2 py-2">
         <ChipsRow
