@@ -1,0 +1,3 @@
+# Use Personal Access Tokens, not OAuth, for external Integrations
+
+Settings → Integrations connects to Jira, Confluence, and GitHub using a Personal Access Token (PAT) pasted by the user, rather than an OAuth authorization-code flow. Neira has no OAuth infrastructure (no redirect handler, no registered OAuth apps with any of the three providers), while the existing Models tab already has a proven token-based pattern backed by the OS credential store (Keychain / Credential Manager / permissioned JSON file). As a single-user desktop app, there is no multi-tenant reason to prefer OAuth's delegated-access model. OAuth can be added later per-provider without breaking the PAT path, since each Integration's credential shape is provider-specific already.

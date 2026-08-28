@@ -184,6 +184,8 @@ export type Preferences = {
   editorCustomFormatCommand: string;
   lspActivation: Record<string, LspActivation>;
   lspCustomServers: LspCustomServer[];
+  /** Repo full names (e.g. "owner/name") scoped to the GitHub Integration. */
+  githubSelectedRepos: string[];
 };
 
 export type EditorFormatter =
@@ -277,6 +279,7 @@ const KEY_EDITOR_FORMATTER_BY_LANG = "editorFormatterByLang";
 const KEY_EDITOR_CUSTOM_FORMAT_COMMAND = "editorCustomFormatCommand";
 const KEY_LSP_ACTIVATION = "lspActivation";
 const KEY_LSP_CUSTOM_SERVERS = "lspCustomServers";
+const KEY_GITHUB_SELECTED_REPOS = "githubSelectedRepos";
 
 export const TERMINAL_FONT_SIZE_DEFAULT = 14;
 export const TERMINAL_FONT_SIZE_MIN = 8;
@@ -368,6 +371,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   editorCustomFormatCommand: "",
   lspActivation: {},
   lspCustomServers: [],
+  githubSelectedRepos: [],
 };
 
 const store = new LazyStore(STORE_PATH, { defaults: {}, autoSave: 200 });
@@ -573,6 +577,9 @@ export async function loadPreferences(): Promise<Preferences> {
     lspCustomServers:
       get<LspCustomServer[]>(KEY_LSP_CUSTOM_SERVERS) ??
       DEFAULT_PREFERENCES.lspCustomServers,
+    githubSelectedRepos:
+      get<string[]>(KEY_GITHUB_SELECTED_REPOS) ??
+      DEFAULT_PREFERENCES.githubSelectedRepos,
   };
 }
 
@@ -593,6 +600,10 @@ export async function setLspCustomServers(
   value: LspCustomServer[],
 ): Promise<void> {
   await writePref(KEY_LSP_CUSTOM_SERVERS, value);
+}
+
+export async function setGithubSelectedRepos(value: string[]): Promise<void> {
+  await writePref(KEY_GITHUB_SELECTED_REPOS, value);
 }
 
 export async function setTheme(value: ThemePref): Promise<void> {
@@ -1015,6 +1026,7 @@ export async function onPreferencesChange(
     [KEY_EDITOR_CUSTOM_FORMAT_COMMAND]: "editorCustomFormatCommand",
     [KEY_LSP_ACTIVATION]: "lspActivation",
     [KEY_LSP_CUSTOM_SERVERS]: "lspCustomServers",
+    [KEY_GITHUB_SELECTED_REPOS]: "githubSelectedRepos",
   };
   // Same-process writes still fire onChange immediately; cross-window writes
   // arrive via the Tauri event emitted by writePref().

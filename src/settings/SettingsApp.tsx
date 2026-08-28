@@ -8,6 +8,7 @@ import {
   InformationCircleIcon,
   KeyboardIcon,
   PaintBoardIcon,
+  PuzzleIcon,
   Settings01Icon,
   SourceCodeIcon,
   UserMultiple02Icon,
@@ -19,6 +20,7 @@ import { AboutSection } from "./sections/AboutSection";
 import { AgentsSection } from "./sections/AgentsSection";
 import { EditorSection } from "./sections/EditorSection";
 import { GeneralSection } from "./sections/GeneralSection";
+import { IntegrationsSection } from "./sections/IntegrationsSection";
 import { ModelsSection } from "./sections/ModelsSection";
 import { ShortcutsSection } from "./sections/ShortcutsSection";
 import { ThemesSection } from "./sections/ThemesSection";
@@ -55,6 +57,12 @@ const TABS: {
   },
   { id: "models", label: "Models", icon: AiScanIcon, component: ModelsSection },
   {
+    id: "integrations",
+    label: "Integrations",
+    icon: PuzzleIcon,
+    component: IntegrationsSection,
+  },
+  {
     id: "agents",
     label: "Agents",
     icon: UserMultiple02Icon,
@@ -74,6 +82,7 @@ const VALID_TABS: SettingsTab[] = [
   "themes",
   "shortcuts",
   "models",
+  "integrations",
   "agents",
   "about",
 ];
