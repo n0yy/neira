@@ -38,16 +38,20 @@ function authHeader(email: string, token: string): string {
 async function atlassianFetch(
   creds: AtlassianCredentials,
   path: string,
+  init?: { method?: string; body?: string },
 ): Promise<Response> {
   // Atlassian Cloud's REST API doesn't send CORS headers for third-party
   // origins (unlike GitHub's), so a direct webview `fetch()` fails with
   // "Load failed". Route through the Rust-side HTTP proxy instead, which
   // makes a native request unaffected by browser CORS.
   return proxyFetch(`https://${normalizeAtlassianSite(creds.site)}${path}`, {
+    method: init?.method,
     headers: {
       Authorization: authHeader(creds.email, creds.token),
       Accept: "application/json",
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
     },
+    body: init?.body,
   });
 }
 
@@ -163,4 +167,218 @@ export function filterAtlassianItems<T extends { key: string; name: string }>(
   return items.filter(
     (i) => i.key.toLowerCase().includes(q) || i.name.toLowerCase().includes(q),
   );
+}
+
+const SEARCH_RESULTS_LIMIT = 25;
+const MAX_TEXT_CHARS = 20_000;
+
+function jqlQuoteList(values: readonly string[]): string {
+  return values.map((v) => `"${v.replace(/"/g, '\\"')}"`).join(",");
+}
+
+/**
+ * Inserts `AND <clause>` into a JQL/CQL query, ahead of a trailing `ORDER BY`
+ * if present — wrapping the whole query (including ORDER BY) in parentheses
+ * is invalid syntax, since ORDER BY must be the outermost trailing clause.
+ */
+function scopeQuery(query: string, clause: string): string {
+  const match = query.match(/\bORDER\s+BY\b/i);
+  if (!match || match.index === undefined) {
+    return `(${query}) AND ${clause}`;
+  }
+  const before = query.slice(0, match.index).trim();
+  const orderBy = query.slice(match.index).trim();
+  return `(${before}) AND ${clause} ${orderBy}`;
+}
+
+function clipText(text: string): string {
+  return text.length > MAX_TEXT_CHARS
+    ? `${text.slice(0, MAX_TEXT_CHARS)}…`
+    : text;
+}
+
+/** Minimal Atlassian Document Format → plain text (paragraphs/headings only). */
+type AdfNode = { type?: string; text?: string; content?: AdfNode[] };
+function adfToText(node: unknown): string {
+  if (!node || typeof node !== "object") return "";
+  const n = node as AdfNode;
+  if (n.type === "text") return n.text ?? "";
+  const child = (n.content ?? []).map(adfToText).join("");
+  return n.type === "paragraph" || n.type === "heading" ? `${child}\n` : child;
+}
+
+/** Strips Confluence's storage-format markup (XHTML-based) down to text. */
+function stripStorageFormat(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Strips CQL search-result highlight markers (`@@@hl@@@word@@@endhl@@@`). */
+function stripHighlightMarkers(text: string): string {
+  return text.replace(/@@@(?:end)?hl@@@/g, "");
+}
+
+export type JiraIssueHit = {
+  key: string;
+  summary: string;
+  status: string;
+  url: string;
+};
+
+/**
+ * Searches Jira issues via `POST /rest/api/3/search/jql` — the replacement
+ * for the removed `GET /rest/api/3/search`. Deliberately does NOT paginate
+ * via `nextPageToken`: Atlassian's own issue tracker has reports of that
+ * token never terminating (`isLast` staying false indefinitely), so a single
+ * capped page is both simpler and safer for a search tool that only needs
+ * the top matches.
+ */
+export async function searchJql(
+  creds: AtlassianCredentials,
+  jql: string,
+  projectKeys: readonly string[],
+): Promise<JiraIssueHit[]> {
+  if (projectKeys.length === 0) return [];
+  const scopedJql = scopeQuery(jql, `project in (${jqlQuoteList(projectKeys)})`);
+  const res = await atlassianFetch(creds, "/rest/api/3/search/jql", {
+    method: "POST",
+    body: JSON.stringify({
+      jql: scopedJql,
+      maxResults: SEARCH_RESULTS_LIMIT,
+      fields: ["summary", "status"],
+    }),
+  });
+  requireOk(res);
+  const data = (await res.json()) as {
+    issues: Array<{
+      key: string;
+      fields: { summary: string; status?: { name: string } };
+    }>;
+  };
+  const site = normalizeAtlassianSite(creds.site);
+  return data.issues.map((i) => ({
+    key: i.key,
+    summary: i.fields.summary,
+    status: i.fields.status?.name ?? "",
+    url: `https://${site}/browse/${i.key}`,
+  }));
+}
+
+export type ConfluencePageHit = {
+  id: string;
+  title: string;
+  excerpt: string;
+  url: string;
+};
+
+/** Searches Confluence pages via CQL against `GET /wiki/rest/api/search`. */
+export async function searchCql(
+  creds: AtlassianCredentials,
+  cql: string,
+  spaceKeys: readonly string[],
+): Promise<ConfluencePageHit[]> {
+  if (spaceKeys.length === 0) return [];
+  const scopedCql = scopeQuery(cql, `space in (${jqlQuoteList(spaceKeys)})`);
+  const res = await atlassianFetch(
+    creds,
+    `/wiki/rest/api/search?cql=${encodeURIComponent(scopedCql)}&limit=${SEARCH_RESULTS_LIMIT}`,
+  );
+  requireOk(res);
+  const data = (await res.json()) as {
+    results: Array<{
+      content?: { id: string; title: string };
+      title?: string;
+      excerpt?: string;
+      url: string;
+    }>;
+  };
+  const site = normalizeAtlassianSite(creds.site);
+  return data.results.map((r) => ({
+    id: r.content?.id ?? "",
+    title: r.content?.title ?? r.title ?? "",
+    excerpt: stripHighlightMarkers(r.excerpt ?? ""),
+    url: `https://${site}/wiki${r.url}`,
+  }));
+}
+
+export type JiraIssueDetail = JiraIssueHit & { description: string };
+
+/** Fetches one Jira issue's full fields, including its description as plain text. */
+export async function getJiraIssue(
+  creds: AtlassianCredentials,
+  key: string,
+): Promise<JiraIssueDetail> {
+  const res = await atlassianFetch(
+    creds,
+    `/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,status,description`,
+  );
+  if (!res.ok) {
+    if (res.status === 404) {
+      throw new AtlassianApiError(`Issue not found: ${key}.`);
+    }
+    requireOk(res);
+  }
+  const data = (await res.json()) as {
+    key: string;
+    fields: {
+      summary: string;
+      status?: { name: string };
+      description?: unknown;
+    };
+  };
+  const site = normalizeAtlassianSite(creds.site);
+  return {
+    key: data.key,
+    summary: data.fields.summary,
+    status: data.fields.status?.name ?? "",
+    url: `https://${site}/browse/${data.key}`,
+    description: clipText(adfToText(data.fields.description).trim()),
+  };
+}
+
+export type ConfluencePageDetail = {
+  id: string;
+  title: string;
+  spaceKey: string;
+  content: string;
+  url: string;
+};
+
+/** Fetches one Confluence page's full body content as plain text. */
+export async function getConfluencePage(
+  creds: AtlassianCredentials,
+  id: string,
+): Promise<ConfluencePageDetail> {
+  const res = await atlassianFetch(
+    creds,
+    `/wiki/rest/api/content/${encodeURIComponent(id)}?expand=body.storage,space`,
+  );
+  if (!res.ok) {
+    if (res.status === 404) {
+      throw new AtlassianApiError(`Page not found: ${id}.`);
+    }
+    requireOk(res);
+  }
+  const data = (await res.json()) as {
+    id: string;
+    title: string;
+    space?: { key: string };
+    body?: { storage?: { value: string } };
+    _links?: { webui?: string };
+  };
+  const site = normalizeAtlassianSite(creds.site);
+  return {
+    id: data.id,
+    title: data.title,
+    spaceKey: data.space?.key ?? "",
+    content: clipText(stripStorageFormat(data.body?.storage?.value ?? "")),
+    url: `https://${site}/wiki${data._links?.webui ?? ""}`,
+  };
 }

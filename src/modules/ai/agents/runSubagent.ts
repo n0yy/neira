@@ -3,6 +3,7 @@ import { DEFAULT_MODEL_ID, getModel, type ModelId } from "../config";
 import { buildLanguageModel } from "../lib/agent";
 import type { ProviderKeys } from "../lib/keyring";
 import type { ToolContext } from "../tools/context";
+import { buildAtlassianExploreTools } from "../tools/atlassianExplore";
 import { buildFsTools } from "../tools/fs";
 import { buildGithubExploreTools } from "../tools/githubExplore";
 import { buildSearchTools } from "../tools/search";
@@ -42,6 +43,7 @@ export async function runSubagent({
     ...buildFsTools(toolContext),
     ...buildSearchTools(toolContext),
     ...buildGithubExploreTools(toolContext),
+    ...buildAtlassianExploreTools(toolContext),
   };
   const tools: Record<string, unknown> = {};
   for (const t of def.tools) {

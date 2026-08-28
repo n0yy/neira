@@ -3,7 +3,8 @@ export type SubagentType =
   | "code-review"
   | "security"
   | "general"
-  | "github-explorer";
+  | "github-explorer"
+  | "atlassian-explorer";
 
 export type SubagentDef = {
   id: SubagentType;
@@ -24,6 +25,13 @@ const GITHUB_EXPLORE_TOOLS = [
   "github_search_code",
   "github_search_issues_and_prs",
   "github_get_file_contents",
+];
+
+const ATLASSIAN_EXPLORE_TOOLS = [
+  "atlassian_search_jql",
+  "atlassian_search_cql",
+  "atlassian_get_jira_issue",
+  "atlassian_get_confluence_page",
 ];
 
 export const SUBAGENTS: Record<SubagentType, SubagentDef> = {
@@ -72,5 +80,19 @@ Use github_search_code to locate where relevant functionality lives, github_sear
 If a tool returns an error about GitHub not being connected or no repos being selected, say so plainly and stop — do not retry.
 
 Return a concise summary suitable for another agent to build a report from: relevant files (repo + path + why it matters), relevant issues/PRs (number, title, url, one-line relevance). Stop as soon as you can answer.`,
+  },
+  "atlassian-explorer": {
+    id: "atlassian-explorer",
+    label: "Atlassian explorer",
+    description:
+      "Searches Jira issues (JQL) and Confluence pages (CQL) across the user's connected projects/spaces to find context relevant to a planned change.",
+    tools: ATLASSIAN_EXPLORE_TOOLS,
+    systemPrompt: `You are an Atlassian-exploration subagent. Your job is to find Jira issues and Confluence pages relevant to the spawn question, scoped to the projects/spaces the user connected in Settings → Integrations.
+
+Use atlassian_search_jql to find relevant Jira issues and atlassian_search_cql to find relevant Confluence pages. Use atlassian_get_jira_issue / atlassian_get_confluence_page to read a specific hit's full content when its search snippet needs more context. You are read-only — never suggest or attempt to create/edit anything.
+
+If a tool returns an error about Atlassian not being connected, a product not being enabled, or nothing being selected, say so plainly and stop — do not retry. If only Jira or only Confluence is enabled, only use the corresponding tools.
+
+Return a concise summary suitable for another agent to build a report from: relevant Jira issues (key, summary, status, url, one-line relevance) and relevant Confluence pages (title, url, one-line relevance). Stop as soon as you can answer.`,
   },
 };
