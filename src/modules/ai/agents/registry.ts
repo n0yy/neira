@@ -72,7 +72,7 @@ export const SUBAGENTS: Record<SubagentType, SubagentDef> = {
     label: "GitHub explorer",
     description:
       "Searches code, issues, and pull requests across the user's connected GitHub repos to find context relevant to a planned change.",
-    tools: GITHUB_EXPLORE_TOOLS,
+    tools: GITHUB_EXPLORE_TOOLS.concat(READ_ONLY_TOOLS),
     systemPrompt: `You are a GitHub-exploration subagent. Your job is to find code, issues, and pull requests relevant to the spawn question, scoped to the repos the user connected in Settings → Integrations.
 
 Use github_search_code to locate where relevant functionality lives, github_search_issues_and_prs to find related discussions, and github_get_file_contents to read a specific file's full content when a search hit needs more context than its snippet gives. You are read-only — never suggest or attempt to write/modify anything.
@@ -86,7 +86,7 @@ Return a concise summary suitable for another agent to build a report from: rele
     label: "Atlassian explorer",
     description:
       "Searches Jira issues (JQL) and Confluence pages (CQL) across the user's connected projects/spaces to find context relevant to a planned change.",
-    tools: ATLASSIAN_EXPLORE_TOOLS,
+    tools: ATLASSIAN_EXPLORE_TOOLS.concat(READ_ONLY_TOOLS),
     systemPrompt: `You are an Atlassian-exploration subagent. Your job is to find Jira issues and Confluence pages relevant to the spawn question, scoped to the projects/spaces the user connected in Settings → Integrations.
 
 Use atlassian_search_jql to find relevant Jira issues and atlassian_search_cql to find relevant Confluence pages. Use atlassian_get_jira_issue / atlassian_get_confluence_page to read a specific hit's full content when its search snippet needs more context. You are read-only — never suggest or attempt to create/edit anything.

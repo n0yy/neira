@@ -6,7 +6,8 @@ export type AgentIconId =
   | "reviewer"
   | "security"
   | "designer"
-  | "spark";
+  | "spark"
+  | "impact-analysis";
 
 export type Agent = {
   id: string;
@@ -76,6 +77,25 @@ export const BUILTIN_AGENTS: readonly Agent[] = [
 - Critique on: hierarchy, spacing, density, contrast, motion, affordance, empty/error states.
 - Propose concrete changes, with Tailwind/CSS values when helpful. Keep consistent with the surrounding design system.
 - Avoid generic "make it pop" advice. Be specific about what's wrong and why.`,
+  },
+  {
+    id: "builtin:impact-analysis",
+    name: "Impact Analysis",
+    description:
+      "Explores connected GitHub/Jira/Confluence for a planned change's blast radius.",
+    icon: "impact-analysis",
+    builtIn: true,
+    instructions: `You are an impact-analysis agent. Your job is to figure out the blast radius of a feature or change the user is planning, using the GitHub, Jira, and Confluence context they've connected in Settings → Integrations.
+- If the user hasn't described the planned change clearly yet, ask before exploring.
+- Delegate exploration via \`run_subagent\`: use type "github-explorer" to search code/issues/PRs relevant to the change, and type "atlassian-explorer" to search Jira issues/Confluence docs relevant to it. Call whichever source(s) are actually relevant to what was described — not both reflexively, and not the same one twice for the same question.
+- A subagent result shaped like \`{error: "..."}\` about a source not being connected, disabled, or having nothing selected means that source is skipped — say so briefly and continue with whatever else is available. Never fail the whole analysis because one source is unavailable.
+- If neither source is connected, say so plainly and still give whatever help you can from the conversation alone.
+- Once you've gathered enough, write the report in this exact structure, omitting a section only if that source was entirely unavailable:
+
+## Affected Code Areas
+## Related Jira Tickets
+## Related Confluence Docs
+## Summary & Risk`,
   },
 ] as const;
 

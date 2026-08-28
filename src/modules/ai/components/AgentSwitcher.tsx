@@ -11,6 +11,7 @@ import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import {
   AbsoluteIcon,
   ArrowDown01Icon,
+  ChartAnalysisIcon,
   CodeIcon,
   PaintBrush04Icon,
   PencilEdit02Icon,
@@ -31,6 +32,7 @@ const ICONS: Record<AgentIconId, typeof CodeIcon> = {
   security: ShieldUserIcon,
   designer: PaintBrush04Icon,
   spark: SparklesIcon,
+  "impact-analysis": ChartAnalysisIcon,
 };
 
 export function AgentSwitcher({ isMiniWindow }: { isMiniWindow?: boolean }) {

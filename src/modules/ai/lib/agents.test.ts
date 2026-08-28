@@ -18,6 +18,16 @@ describe("BUILTIN_AGENTS", () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(BUILTIN_AGENTS.every((a) => a.builtIn)).toBe(true);
   });
+
+  it("Impact Analysis delegates to both explorer subagent types", () => {
+    const impactAnalysis = BUILTIN_AGENTS.find(
+      (a) => a.id === "builtin:impact-analysis",
+    );
+    expect(impactAnalysis).toBeDefined();
+    expect(impactAnalysis?.instructions).toContain("github-explorer");
+    expect(impactAnalysis?.instructions).toContain("atlassian-explorer");
+    expect(impactAnalysis?.instructions).toContain("run_subagent");
+  });
 });
 
 describe("findAgent", () => {

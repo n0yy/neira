@@ -45,6 +45,7 @@ const ICON_OPTIONS: AgentIconId[] = [
   "security",
   "designer",
   "spark",
+  "impact-analysis",
 ];
 
 export function AgentsSection() {
