@@ -9,8 +9,33 @@ vi.mock("../store/chatStore", () => ({
   useChatStore: {
     getState: () => ({
       apiKeys: {},
-      selectedModelId: "model",
+      selectedModelId: "compat-db5061e3",
+      customEndpointKeys: { db5061e3: "ep-key" },
       patchAgentMeta: vi.fn(),
+    }),
+  },
+}));
+vi.mock("@/modules/settings/preferences", () => ({
+  usePreferencesStore: {
+    getState: () => ({
+      lmstudioBaseURL: "http://localhost:1234/v1",
+      lmstudioModelId: "",
+      mlxBaseURL: "http://127.0.0.1:8080/v1",
+      mlxModelId: "",
+      ollamaBaseURL: "http://localhost:11434/v1",
+      ollamaModelId: "",
+      openaiCompatibleBaseURL: "",
+      openaiCompatibleModelId: "",
+      openrouterModelId: "",
+      customEndpoints: [
+        {
+          id: "db5061e3",
+          name: "My endpoint",
+          baseURL: "http://localhost:1234/v1",
+          modelId: "qwen2.5-coder",
+          contextLimit: 128_000,
+        },
+      ],
     }),
   },
 }));
@@ -74,5 +99,25 @@ describe("run_subagent", () => {
     const r = await run({ type: "reviewer", prompt: "review it" });
     expect(r.type).toBe("reviewer");
     expect(r.error).toContain("boom");
+  });
+
+  it("forwards the parent's selected model id and local/custom-endpoint config to runSubagent", async () => {
+    runSubagentMock.mockResolvedValue({
+      summary: "done",
+      stepCount: 1,
+      durationMs: 10,
+    });
+
+    await run({ type: "atlassian-explorer", prompt: "find related tickets" });
+
+    expect(runSubagentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: "compat-db5061e3",
+        customEndpoints: [
+          expect.objectContaining({ id: "db5061e3", modelId: "qwen2.5-coder" }),
+        ],
+        customEndpointKeys: { db5061e3: "ep-key" },
+      }),
+    );
   });
 });

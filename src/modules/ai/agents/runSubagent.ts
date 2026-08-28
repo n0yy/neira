@@ -1,6 +1,9 @@
 import { generateText, stepCountIs } from "ai";
-import { DEFAULT_MODEL_ID, getModel, type ModelId } from "../config";
-import { buildLanguageModel } from "../lib/agent";
+import { DEFAULT_MODEL_ID, type ModelId } from "../config";
+import {
+  buildConfiguredLanguageModel,
+  type LocalProviderConfig,
+} from "../lib/agent";
 import type { ProviderKeys } from "../lib/keyring";
 import type { ToolContext } from "../tools/context";
 import { buildAtlassianExploreTools } from "../tools/atlassianExplore";
@@ -17,9 +20,8 @@ type Args = {
   keys: ProviderKeys;
   modelId: string;
   toolContext: ToolContext;
-  lmstudioBaseURL?: string;
   onStep?: (label: string) => void;
-};
+} & LocalProviderConfig;
 
 type RunResult = {
   summary: string;
@@ -33,8 +35,8 @@ export async function runSubagent({
   keys,
   modelId,
   toolContext,
-  lmstudioBaseURL,
   onStep,
+  ...local
 }: Args): Promise<RunResult> {
   const def = SUBAGENTS[type];
   if (!def) throw new Error(`unknown subagent type: ${type}`);
@@ -50,12 +52,13 @@ export async function runSubagent({
     if (t in readOnly) tools[t] = readOnly[t];
   }
 
-  const model = await buildLanguageModel(
-    getModel(modelId as ModelId).provider,
-    keys,
-    getModel(modelId as ModelId).id,
-    { lmstudioBaseURL },
-  );
+  // Resolve the SAME model the parent agent is using — including custom
+  // OpenAI-compatible endpoints ("compat-<id>"), local providers (LM
+  // Studio/MLX/Ollama), and OpenRouter overrides. `getModel()` only knows
+  // the static catalog, so it threw "Unknown model" for anything else;
+  // `buildConfiguredLanguageModel` is the same resolver the main chat loop
+  // uses (see `runAgentStream` in lib/agent.ts).
+  const model = await buildConfiguredLanguageModel(modelId, keys, local);
 
   const start = Date.now();
   const result = await generateText({
