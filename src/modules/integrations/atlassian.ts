@@ -1,3 +1,5 @@
+import { proxyFetch } from "@/modules/ai/lib/proxyFetch";
+
 const MAX_PAGES = 5;
 const PAGE_SIZE = 100;
 
@@ -33,12 +35,16 @@ async function atlassianFetch(
   creds: AtlassianCredentials,
   path: string,
 ): Promise<Response> {
-  return fetch(`https://${normalizeAtlassianSite(creds.site)}${path}`, {
+  // Atlassian Cloud's REST API doesn't send CORS headers for third-party
+  // origins (unlike GitHub's), so a direct webview `fetch()` fails with
+  // "Load failed". Route through the Rust-side HTTP proxy instead, which
+  // makes a native request unaffected by browser CORS.
+  return proxyFetch(`https://${normalizeAtlassianSite(creds.site)}${path}`, {
     headers: {
       Authorization: authHeader(creds.email, creds.token),
       Accept: "application/json",
     },
-  }) as Promise<Response>;
+  });
 }
 
 function requireOk(res: Response): void {

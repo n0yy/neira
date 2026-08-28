@@ -1,4 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/modules/ai/lib/proxyFetch", () => ({
+  proxyFetch: vi.fn(),
+}));
+
+import { proxyFetch } from "@/modules/ai/lib/proxyFetch";
 import {
   AtlassianApiError,
   filterAtlassianItems,
@@ -8,11 +14,17 @@ import {
   validateAtlassianCredentials,
 } from "./atlassian";
 
+const fetchMock = vi.mocked(proxyFetch);
+
 afterEach(() => {
-  vi.unstubAllGlobals();
+  fetchMock.mockReset();
 });
 
 const creds = { site: "acme.atlassian.net", email: "a@acme.com", token: "tok" };
+
+function jsonResponse(body: unknown, ok = true, status = 200) {
+  return { ok, status, json: async () => body } as Response;
+}
 
 describe("normalizeAtlassianSite", () => {
   it("passes through a full atlassian.net host", () => {
@@ -37,18 +49,13 @@ describe("validateAtlassianCredentials", () => {
     await expect(
       validateAtlassianCredentials(creds, { jira: false, confluence: false }),
     ).rejects.toThrow(/enable jira/i);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("validates against the Jira endpoint when Jira is enabled, sending Basic auth", async () => {
-    const fetchMock = vi.fn(
-      async (_url: string, _init?: RequestInit) =>
-        ({
-          ok: true,
-          status: 200,
-          json: async () => ({ accountId: "acc1", displayName: "Ada" }),
-        }) as Response,
+  it("validates against the Jira endpoint when Jira is enabled, sending Basic auth via the Rust HTTP proxy", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ accountId: "acc1", displayName: "Ada" }),
     );
-    vi.stubGlobal("fetch", fetchMock);
 
     const user = await validateAtlassianCredentials(creds, {
       jira: true,
@@ -58,22 +65,16 @@ describe("validateAtlassianCredentials", () => {
     expect(user).toEqual({ accountId: "acc1", displayName: "Ada" });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://acme.atlassian.net/rest/api/3/myself");
-    if (!init) throw new Error("fetch was called without an init object");
+    if (!init) throw new Error("proxyFetch was called without an init object");
     expect((init.headers as Record<string, string>).Authorization).toBe(
       `Basic ${btoa("a@acme.com:tok")}`,
     );
   });
 
   it("validates against the Confluence endpoint when only Confluence is enabled", async () => {
-    const fetchMock = vi.fn(
-      async (_url: string, _init?: RequestInit) =>
-        ({
-          ok: true,
-          status: 200,
-          json: async () => ({ accountId: "acc1", displayName: "Ada" }),
-        }) as Response,
+    fetchMock.mockResolvedValue(
+      jsonResponse({ accountId: "acc1", displayName: "Ada" }),
     );
-    vi.stubGlobal("fetch", fetchMock);
 
     await validateAtlassianCredentials(creds, {
       jira: false,
@@ -85,10 +86,7 @@ describe("validateAtlassianCredentials", () => {
   });
 
   it("throws a friendly error on 401", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) })),
-    );
+    fetchMock.mockResolvedValue(jsonResponse({}, false, 401));
 
     await expect(
       validateAtlassianCredentials(creds, { jira: true, confluence: false }),
@@ -101,16 +99,11 @@ describe("validateAtlassianCredentials", () => {
 
 describe("listJiraProjects", () => {
   it("stops once isLast is true", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          values: [{ id: "1", key: "ENG", name: "Engineering" }],
-          isLast: true,
-        }),
-      })),
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        values: [{ id: "1", key: "ENG", name: "Engineering" }],
+        isLast: true,
+      }),
     );
 
     const result = await listJiraProjects(creds);
@@ -120,10 +113,7 @@ describe("listJiraProjects", () => {
   });
 
   it("throws on a non-ok response", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({ ok: false, status: 403, json: async () => ({}) })),
-    );
+    fetchMock.mockResolvedValue(jsonResponse({}, false, 403));
 
     await expect(listJiraProjects(creds)).rejects.toThrow(AtlassianApiError);
   });
@@ -131,16 +121,11 @@ describe("listJiraProjects", () => {
 
 describe("listConfluenceSpaces", () => {
   it("stops once a short page is returned", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          results: [{ id: 10, key: "ENG", name: "Engineering Docs" }],
-          size: 1,
-        }),
-      })),
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        results: [{ id: 10, key: "ENG", name: "Engineering Docs" }],
+        size: 1,
+      }),
     );
 
     const result = await listConfluenceSpaces(creds);
