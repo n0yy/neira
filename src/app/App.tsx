@@ -1412,9 +1412,21 @@ export default function App() {
           )}
 
           <main className="zoom-content flex min-h-0 flex-1 flex-col">
+            {/*
+              zoom-exempt: react-resizable-panels computes drag deltas from
+              PointerEvent.clientX divided by the group's getBoundingClientRect()
+              width. WebKit (macOS webview) doesn't report those two
+              measurements consistently once an ancestor has non-1 CSS `zoom`
+              (same root cause as the CodeMirror cursor-offset and Agent
+              Switcher popover-position bugs fixed elsewhere in this app) —
+              drag-resize silently does nothing at zoom != 100%. Exempting the
+              group itself makes its own layout math zoom-bug-free; each
+              panel's content re-applies zoom-content below so the actual UI
+              still scales with the user's zoom level as before.
+            */}
             <ResizablePanelGroup
               orientation="horizontal"
-              className="min-h-0 flex-1"
+              className="zoom-exempt min-h-0 flex-1"
               onLayoutChanged={(_, { isUserInteraction }) => {
                 const sidebarW = sidebarRef.current?.getSize().inPixels ?? 0;
                 persistSidebarWidth(sidebarW, isUserInteraction);
@@ -1438,7 +1450,7 @@ export default function App() {
                   persistSidebarCollapsed(size.inPixels <= 0);
                 }}
               >
-                <div className="h-full min-h-0 pl-2 pr-0.5">
+                <div className="zoom-content h-full min-h-0 pl-2 pr-0.5">
                   <div className="neira-pane flex h-full min-h-0 flex-col">
                     <div
                       key={sidebarView}
@@ -1488,7 +1500,7 @@ export default function App() {
               </ResizablePanel>
               <ResizableHandle className="w-1 rounded-full bg-transparent transition-colors duration-[var(--dur-fast)] after:w-4 hover:bg-border" />
               <ResizablePanel id="workspace" defaultSize="58%" minSize="30%">
-                <div className="h-full min-h-0 pl-0.5 pr-0.5">
+                <div className="zoom-content h-full min-h-0 pl-0.5 pr-0.5">
                   <div className="neira-pane flex h-full min-h-0 flex-col">
                     <div className="relative min-h-0 flex-1">
                       <WorkspaceSurface
@@ -1544,7 +1556,7 @@ export default function App() {
                   persistAiDockCollapsed(size.inPixels <= 0);
                 }}
               >
-                <div className="h-full min-h-0 pl-0.5 pr-2">
+                <div className="zoom-content h-full min-h-0 pl-0.5 pr-2">
                   <div className="neira-pane flex h-full min-h-0 flex-col overflow-hidden border-l border-border/40">
                     <AiDockPanel
                       hasComposer={hasComposer}
