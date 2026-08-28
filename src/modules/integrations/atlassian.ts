@@ -20,9 +20,13 @@ export type ConfluenceSpace = { key: string; name: string };
 
 export type AtlassianPage<T> = { items: T[]; truncated: boolean };
 
-/** Accepts a bare site name, a full host, or a URL; returns the bare host. */
+/** Accepts a bare site name, a full host, or a URL (with or without a path); returns the bare host. */
 export function normalizeAtlassianSite(site: string): string {
-  let s = site.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  let s = site.trim().replace(/^https?:\/\//, "");
+  // Drop everything from the first `/` onward — a pasted URL like
+  // "acme.atlassian.net/jira/projects" must not become part of the host.
+  const slash = s.indexOf("/");
+  if (slash !== -1) s = s.slice(0, slash);
   if (!s.includes(".")) s = `${s}.atlassian.net`;
   return s;
 }
@@ -55,18 +59,10 @@ function requireOk(res: Response): void {
   throw new AtlassianApiError(`Atlassian API error (${res.status}).`);
 }
 
-export async function validateAtlassianCredentials(
+async function fetchAtlassianUser(
   creds: AtlassianCredentials,
-  products: AtlassianProducts,
+  path: string,
 ): Promise<AtlassianUser> {
-  if (!products.jira && !products.confluence) {
-    throw new AtlassianApiError(
-      "Enable Jira and/or Confluence before connecting.",
-    );
-  }
-  const path = products.jira
-    ? "/rest/api/3/myself"
-    : "/wiki/rest/api/user/current";
   const res = await atlassianFetch(creds, path);
   requireOk(res);
   const data = (await res.json()) as {
@@ -78,6 +74,38 @@ export async function validateAtlassianCredentials(
     accountId: data.accountId,
     displayName: data.displayName ?? data.username ?? data.accountId,
   };
+}
+
+export async function validateAtlassianCredentials(
+  creds: AtlassianCredentials,
+  products: AtlassianProducts,
+): Promise<AtlassianUser> {
+  if (!products.jira && !products.confluence) {
+    throw new AtlassianApiError(
+      "Enable Jira and/or Confluence before connecting.",
+    );
+  }
+  // Check every enabled product, not just one — a token can be valid for
+  // Jira but scoped/permissioned out of Confluence (or vice versa), and a
+  // "Connected" status must mean every enabled product actually works.
+  let user: AtlassianUser | undefined;
+  if (products.jira) {
+    user = await fetchAtlassianUser(creds, "/rest/api/3/myself");
+  }
+  if (products.confluence) {
+    const confluenceUser = await fetchAtlassianUser(
+      creds,
+      "/wiki/rest/api/user/current",
+    );
+    user ??= confluenceUser;
+  }
+  if (!user) {
+    // Unreachable given the guard above, but keeps the return type honest.
+    throw new AtlassianApiError(
+      "Enable Jira and/or Confluence before connecting.",
+    );
+  }
+  return user;
 }
 
 export async function listJiraProjects(

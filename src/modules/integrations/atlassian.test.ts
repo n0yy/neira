@@ -42,6 +42,15 @@ describe("normalizeAtlassianSite", () => {
   it("expands a bare site name to atlassian.net", () => {
     expect(normalizeAtlassianSite("acme")).toBe("acme.atlassian.net");
   });
+
+  it("drops a path suffix pasted along with the URL", () => {
+    expect(
+      normalizeAtlassianSite("https://acme.atlassian.net/jira/projects"),
+    ).toBe("acme.atlassian.net");
+    expect(normalizeAtlassianSite("acme.atlassian.net/wiki/spaces/ENG")).toBe(
+      "acme.atlassian.net",
+    );
+  });
 });
 
 describe("validateAtlassianCredentials", () => {
@@ -83,6 +92,32 @@ describe("validateAtlassianCredentials", () => {
 
     const [url] = fetchMock.mock.calls[0];
     expect(url).toBe("https://acme.atlassian.net/wiki/rest/api/user/current");
+  });
+
+  it("checks both endpoints when both products are enabled, and fails if either does", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ accountId: "acc1", displayName: "Ada" }),
+    );
+
+    await validateAtlassianCredentials(creds, { jira: true, confluence: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const urls = fetchMock.mock.calls.map(([url]) => url);
+    expect(urls).toContain("https://acme.atlassian.net/rest/api/3/myself");
+    expect(urls).toContain(
+      "https://acme.atlassian.net/wiki/rest/api/user/current",
+    );
+
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({ accountId: "acc1", displayName: "Ada" }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}, false, 403));
+
+    await expect(
+      validateAtlassianCredentials(creds, { jira: true, confluence: true }),
+    ).rejects.toThrow(AtlassianApiError);
   });
 
   it("throws a friendly error on 401", async () => {

@@ -1,4 +1,9 @@
-export type SubagentType = "explore" | "code-review" | "security" | "general";
+export type SubagentType =
+  | "explore"
+  | "code-review"
+  | "security"
+  | "general"
+  | "github-explorer";
 
 export type SubagentDef = {
   id: SubagentType;
@@ -14,6 +19,12 @@ export type SubagentDef = {
 };
 
 const READ_ONLY_TOOLS = ["read_file", "list_directory", "grep", "glob"];
+
+const GITHUB_EXPLORE_TOOLS = [
+  "github_search_code",
+  "github_search_issues_and_prs",
+  "github_get_file_contents",
+];
 
 export const SUBAGENTS: Record<SubagentType, SubagentDef> = {
   explore: {
@@ -47,5 +58,19 @@ export const SUBAGENTS: Record<SubagentType, SubagentDef> = {
       "General-purpose worker for multi-step research questions that span many files.",
     tools: READ_ONLY_TOOLS,
     systemPrompt: `You are a general-purpose research subagent. Answer the spawn question by reading the codebase. Don't speculate — verify. Return a tight summary with the evidence you used (paths, line numbers).`,
+  },
+  "github-explorer": {
+    id: "github-explorer",
+    label: "GitHub explorer",
+    description:
+      "Searches code, issues, and pull requests across the user's connected GitHub repos to find context relevant to a planned change.",
+    tools: GITHUB_EXPLORE_TOOLS,
+    systemPrompt: `You are a GitHub-exploration subagent. Your job is to find code, issues, and pull requests relevant to the spawn question, scoped to the repos the user connected in Settings → Integrations.
+
+Use github_search_code to locate where relevant functionality lives, github_search_issues_and_prs to find related discussions, and github_get_file_contents to read a specific file's full content when a search hit needs more context than its snippet gives. You are read-only — never suggest or attempt to write/modify anything.
+
+If a tool returns an error about GitHub not being connected or no repos being selected, say so plainly and stop — do not retry.
+
+Return a concise summary suitable for another agent to build a report from: relevant files (repo + path + why it matters), relevant issues/PRs (number, title, url, one-line relevance). Stop as soon as you can answer.`,
   },
 };
