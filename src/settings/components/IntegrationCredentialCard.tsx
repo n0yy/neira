@@ -36,6 +36,8 @@ type Props = {
   statusDetail?: string | null;
   onConnect: (values: Record<string, string>) => Promise<void>;
   onDisconnect: () => Promise<void>;
+  /** Rendered between the credential fields and the Connect button, before a connection exists. */
+  formExtra?: ReactNode;
   /** Rendered below the credential row while status === "connected". */
   children?: ReactNode;
 };
@@ -50,6 +52,7 @@ export function IntegrationCredentialCard({
   statusDetail,
   onConnect,
   onDisconnect,
+  formExtra,
   children,
 }: Props) {
   const [values, setValues] = useState<Record<string, string>>({});
@@ -150,6 +153,7 @@ export function IntegrationCredentialCard({
               />
             </div>
           ))}
+          {formExtra}
           <Button
             size="sm"
             onClick={() => void submit()}

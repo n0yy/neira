@@ -186,6 +186,13 @@ export type Preferences = {
   lspCustomServers: LspCustomServer[];
   /** Repo full names (e.g. "owner/name") scoped to the GitHub Integration. */
   githubSelectedRepos: string[];
+  /** Non-secret Atlassian Integration connection details; the API token lives in the keychain. */
+  atlassianSite: string;
+  atlassianEmail: string;
+  atlassianJiraEnabled: boolean;
+  atlassianConfluenceEnabled: boolean;
+  atlassianSelectedProjects: string[];
+  atlassianSelectedSpaces: string[];
 };
 
 export type EditorFormatter =
@@ -280,6 +287,12 @@ const KEY_EDITOR_CUSTOM_FORMAT_COMMAND = "editorCustomFormatCommand";
 const KEY_LSP_ACTIVATION = "lspActivation";
 const KEY_LSP_CUSTOM_SERVERS = "lspCustomServers";
 const KEY_GITHUB_SELECTED_REPOS = "githubSelectedRepos";
+const KEY_ATLASSIAN_SITE = "atlassianSite";
+const KEY_ATLASSIAN_EMAIL = "atlassianEmail";
+const KEY_ATLASSIAN_JIRA_ENABLED = "atlassianJiraEnabled";
+const KEY_ATLASSIAN_CONFLUENCE_ENABLED = "atlassianConfluenceEnabled";
+const KEY_ATLASSIAN_SELECTED_PROJECTS = "atlassianSelectedProjects";
+const KEY_ATLASSIAN_SELECTED_SPACES = "atlassianSelectedSpaces";
 
 export const TERMINAL_FONT_SIZE_DEFAULT = 14;
 export const TERMINAL_FONT_SIZE_MIN = 8;
@@ -372,6 +385,12 @@ export const DEFAULT_PREFERENCES: Preferences = {
   lspActivation: {},
   lspCustomServers: [],
   githubSelectedRepos: [],
+  atlassianSite: "",
+  atlassianEmail: "",
+  atlassianJiraEnabled: true,
+  atlassianConfluenceEnabled: true,
+  atlassianSelectedProjects: [],
+  atlassianSelectedSpaces: [],
 };
 
 const store = new LazyStore(STORE_PATH, { defaults: {}, autoSave: 200 });
@@ -580,6 +599,22 @@ export async function loadPreferences(): Promise<Preferences> {
     githubSelectedRepos:
       get<string[]>(KEY_GITHUB_SELECTED_REPOS) ??
       DEFAULT_PREFERENCES.githubSelectedRepos,
+    atlassianSite:
+      get<string>(KEY_ATLASSIAN_SITE) ?? DEFAULT_PREFERENCES.atlassianSite,
+    atlassianEmail:
+      get<string>(KEY_ATLASSIAN_EMAIL) ?? DEFAULT_PREFERENCES.atlassianEmail,
+    atlassianJiraEnabled:
+      get<boolean>(KEY_ATLASSIAN_JIRA_ENABLED) ??
+      DEFAULT_PREFERENCES.atlassianJiraEnabled,
+    atlassianConfluenceEnabled:
+      get<boolean>(KEY_ATLASSIAN_CONFLUENCE_ENABLED) ??
+      DEFAULT_PREFERENCES.atlassianConfluenceEnabled,
+    atlassianSelectedProjects:
+      get<string[]>(KEY_ATLASSIAN_SELECTED_PROJECTS) ??
+      DEFAULT_PREFERENCES.atlassianSelectedProjects,
+    atlassianSelectedSpaces:
+      get<string[]>(KEY_ATLASSIAN_SELECTED_SPACES) ??
+      DEFAULT_PREFERENCES.atlassianSelectedSpaces,
   };
 }
 
@@ -604,6 +639,36 @@ export async function setLspCustomServers(
 
 export async function setGithubSelectedRepos(value: string[]): Promise<void> {
   await writePref(KEY_GITHUB_SELECTED_REPOS, value);
+}
+
+export async function setAtlassianSite(value: string): Promise<void> {
+  await writePref(KEY_ATLASSIAN_SITE, value.trim());
+}
+
+export async function setAtlassianEmail(value: string): Promise<void> {
+  await writePref(KEY_ATLASSIAN_EMAIL, value.trim());
+}
+
+export async function setAtlassianJiraEnabled(value: boolean): Promise<void> {
+  await writePref(KEY_ATLASSIAN_JIRA_ENABLED, value);
+}
+
+export async function setAtlassianConfluenceEnabled(
+  value: boolean,
+): Promise<void> {
+  await writePref(KEY_ATLASSIAN_CONFLUENCE_ENABLED, value);
+}
+
+export async function setAtlassianSelectedProjects(
+  value: string[],
+): Promise<void> {
+  await writePref(KEY_ATLASSIAN_SELECTED_PROJECTS, value);
+}
+
+export async function setAtlassianSelectedSpaces(
+  value: string[],
+): Promise<void> {
+  await writePref(KEY_ATLASSIAN_SELECTED_SPACES, value);
 }
 
 export async function setTheme(value: ThemePref): Promise<void> {
@@ -1027,6 +1092,12 @@ export async function onPreferencesChange(
     [KEY_LSP_ACTIVATION]: "lspActivation",
     [KEY_LSP_CUSTOM_SERVERS]: "lspCustomServers",
     [KEY_GITHUB_SELECTED_REPOS]: "githubSelectedRepos",
+    [KEY_ATLASSIAN_SITE]: "atlassianSite",
+    [KEY_ATLASSIAN_EMAIL]: "atlassianEmail",
+    [KEY_ATLASSIAN_JIRA_ENABLED]: "atlassianJiraEnabled",
+    [KEY_ATLASSIAN_CONFLUENCE_ENABLED]: "atlassianConfluenceEnabled",
+    [KEY_ATLASSIAN_SELECTED_PROJECTS]: "atlassianSelectedProjects",
+    [KEY_ATLASSIAN_SELECTED_SPACES]: "atlassianSelectedSpaces",
   };
   // Same-process writes still fire onChange immediately; cross-window writes
   // arrive via the Tauri event emitted by writePref().
