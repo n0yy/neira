@@ -27,15 +27,14 @@ import {
   DEFAULT_MODEL_ID,
   getAutocompleteEligibleModels,
   getCompatModelInfo,
-  getModel,
   getProvider,
   isCompatModelId,
   MODELS,
-  type ModelId,
   PROVIDERS,
   type ProviderId,
   type ProviderInfo,
   providerNeedsKey,
+  resolveModel,
 } from "@/modules/ai/config";
 import {
   type CustomEndpointKeys,
@@ -238,13 +237,21 @@ export function ModelsSection() {
     // and the next send throws "Custom endpoint not found". Fall back to another
     // endpoint when one remains, else the default model.
     const remaining = customEndpoints.filter((e) => e.id !== id);
+    const fallbackModelId = remaining[0]
+      ? compatModelIdForEndpoint(remaining[0].id)
+      : DEFAULT_MODEL_ID;
     const { selectedModelId, setSelectedModelId } = useChatStore.getState();
     if (selectedModelId === deadModelId) {
-      setSelectedModelId(
-        remaining[0]
-          ? compatModelIdForEndpoint(remaining[0].id)
-          : DEFAULT_MODEL_ID,
-      );
+      setSelectedModelId(fallbackModelId);
+    }
+
+    // Same dangling-reference risk for the persisted "default chat model"
+    // preference (settings/store.ts's defaultModelId can hold a compat id
+    // since this endpoint could have been set as the default) — otherwise
+    // the next app launch re-hydrates selectedModelId from a dead id.
+    const { defaultModelId } = usePreferencesStore.getState();
+    if (defaultModelId === deadModelId) {
+      await setDefaultModel(fallbackModelId);
     }
 
     await setCustomEndpoints(remaining);
@@ -523,7 +530,7 @@ function DefaultsBlock({
   keys,
   customEndpoints,
 }: {
-  defaultModel: ModelId;
+  defaultModel: string;
   configuredIds: Set<ProviderId>;
   keys: KeysMap;
   customEndpoints: readonly CustomEndpoint[];
@@ -536,6 +543,7 @@ function DefaultsBlock({
           <DefaultModelPicker
             defaultModel={defaultModel}
             configuredIds={configuredIds}
+            customEndpoints={customEndpoints}
           />
         </FieldRow>
         <AutocompleteRow
@@ -551,12 +559,25 @@ function DefaultsBlock({
 function DefaultModelPicker({
   defaultModel,
   configuredIds,
+  customEndpoints,
 }: {
-  defaultModel: ModelId;
+  defaultModel: string;
   configuredIds: Set<ProviderId>;
+  customEndpoints: readonly CustomEndpoint[];
 }) {
-  const m = getModel(defaultModel);
-  const hasAny = configuredIds.size > 0;
+  const m = resolveModel(defaultModel, customEndpoints);
+  // One selectable model per fully-configured named endpoint, same pool
+  // AutocompleteRow already builds for the same reason.
+  const compatItems = useMemo(
+    () =>
+      customEndpoints
+        .filter((e) => e.baseURL.trim() && e.modelId.trim())
+        .map((e) =>
+          getCompatModelInfo(compatModelIdForEndpoint(e.id), customEndpoints),
+        ),
+    [customEndpoints],
+  );
+  const hasAny = configuredIds.size > 0 || compatItems.length > 0;
 
   return (
     <DropdownMenu>
@@ -599,7 +620,7 @@ function DefaultModelPicker({
                 {models.map((mod) => (
                   <DropdownMenuItem
                     key={mod.id}
-                    onSelect={() => void setDefaultModel(mod.id as ModelId)}
+                    onSelect={() => void setDefaultModel(mod.id)}
                     className={cn(
                       "flex items-start gap-2 text-[12px]",
                       mod.id === defaultModel && "bg-accent/50",
@@ -616,6 +637,31 @@ function DefaultModelPicker({
               </div>
             );
           })}
+          {compatItems.length > 0 && (
+            <div className="px-1 pt-1.5 first:pt-1">
+              <div className="mb-0.5 flex items-center gap-1.5 px-2 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                <ProviderIcon provider="openai-compatible" size={11} />
+                <span>Custom endpoints</span>
+              </div>
+              {compatItems.map((item) => (
+                <DropdownMenuItem
+                  key={item.id}
+                  onSelect={() => void setDefaultModel(item.id)}
+                  className={cn(
+                    "flex items-start gap-2 text-[12px]",
+                    item.id === defaultModel && "bg-accent/50",
+                  )}
+                >
+                  <span className="flex flex-1 flex-col">
+                    <span>{item.label}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {item.hint}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </div>
+          )}
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
