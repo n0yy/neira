@@ -61,6 +61,7 @@ Auto-executes (no approval) — subagents are read-only by design.`,
             summary: r.summary,
             stepCount: r.stepCount,
             durationMs: r.durationMs,
+            steps: r.steps,
           };
         } catch (e) {
           return { error: String(e), type };

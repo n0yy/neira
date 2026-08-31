@@ -79,6 +79,9 @@ describe("run_subagent", () => {
       summary: "done",
       stepCount: 4,
       durationMs: 1200,
+      steps: [
+        { toolName: "grep", input: { pattern: "x" }, output: { hits: [] }, durationMs: 50 },
+      ],
     });
     const r = await run({
       type: "reviewer",
@@ -91,6 +94,9 @@ describe("run_subagent", () => {
       summary: "done",
       stepCount: 4,
       durationMs: 1200,
+      steps: [
+        { toolName: "grep", input: { pattern: "x" }, output: { hits: [] }, durationMs: 50 },
+      ],
     });
   });
 

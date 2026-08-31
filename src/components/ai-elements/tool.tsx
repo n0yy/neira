@@ -152,9 +152,13 @@ const ToolImpl = ({
   const open = defaultOpen ?? isError;
   const isHeavy = HEAVY_CONTENT_TOOLS.has(toolName);
   // For heavy tools, only show details on error — never the streamed input
-  // body, which is huge and re-renders per token.
+  // body, which is huge and re-renders per token. run_subagent is the one
+  // exception on the output side: its final output is a small distilled
+  // summary + step trace (see SubagentTrace), not streamed content, so it's
+  // always safe to show.
   const showInputBody = !isHeavy && Boolean(input);
-  const showOutputBody = !isHeavy && output !== undefined;
+  const showOutputBody =
+    (!isHeavy || toolName === "run_subagent") && output !== undefined;
   const hasDetails =
     showInputBody || showOutputBody || Boolean(errorText);
 
@@ -560,6 +564,10 @@ function renderToolOutput(toolName: string, output: unknown): ReactNode | null {
     );
   }
 
+  if (toolName === "run_subagent") {
+    return <SubagentTrace output={o} />;
+  }
+
   if (toolName === "bash_background") {
     const handle = typeof o.handle === "string" ? o.handle : null;
     const cmd = typeof o.command === "string" ? o.command : "";
@@ -578,6 +586,126 @@ function renderToolOutput(toolName: string, output: unknown): ReactNode | null {
   }
 
   return null;
+}
+
+type SubagentStepData = {
+  toolName: string;
+  input: unknown;
+  output: unknown;
+  durationMs: number;
+};
+
+// The subagent's step trace: user-facing only, never fed back into the
+// calling Agent's context (see CONTEXT.md "Step trace" and ADR 0003).
+function SubagentTrace({ output }: { output: Record<string, unknown> }) {
+  const error = typeof output.error === "string" ? output.error : null;
+  if (error) {
+    return (
+      <div className="rounded bg-destructive/10 px-2 py-1.5 font-mono text-[11px] text-destructive whitespace-pre-wrap">
+        {error}
+      </div>
+    );
+  }
+
+  const summary = typeof output.summary === "string" ? output.summary : null;
+  const stepCount =
+    typeof output.stepCount === "number" ? output.stepCount : null;
+  const durationMs =
+    typeof output.durationMs === "number" ? output.durationMs : null;
+  const steps = Array.isArray(output.steps)
+    ? (output.steps as SubagentStepData[])
+    : [];
+
+  return (
+    <div className="space-y-2">
+      {summary ? (
+        <div className="whitespace-pre-wrap text-[12px] text-foreground">
+          {summary}
+        </div>
+      ) : null}
+      {stepCount != null || durationMs != null ? (
+        <div className="text-[10px] text-muted-foreground">
+          {stepCount != null
+            ? `${stepCount} step${stepCount === 1 ? "" : "s"}`
+            : null}
+          {stepCount != null && durationMs != null ? " · " : null}
+          {durationMs != null ? `${(durationMs / 1000).toFixed(1)}s` : null}
+        </div>
+      ) : null}
+      {steps.length > 0 ? (
+        <div className="space-y-0.5">
+          {steps.map((s, idx) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: steps are an
+            // append-only, never-reordered trace for this one tool call.
+            <SubagentStepRow key={idx} step={s} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// A field that truncateForTrace() (runSubagent.ts) shortened is already a
+// display-ready string wrapped as { truncated: true, preview }. Re-running
+// JSON.stringify on that wrapper would double-encode the preview into an
+// escaped, unreadable blob, so unwrap it first. `undefined` (no matching
+// tool result, e.g. an errored call) renders as an explicit placeholder
+// rather than silently going blank.
+function traceFieldCode(value: unknown): string {
+  if (value === undefined) return "(no output)";
+  if (typeof value === "string") return value;
+  if (
+    value &&
+    typeof value === "object" &&
+    (value as { truncated?: unknown }).truncated === true &&
+    typeof (value as { preview?: unknown }).preview === "string"
+  ) {
+    return (value as { preview: string }).preview;
+  }
+  return JSON.stringify(value, null, 2);
+}
+
+function LabeledTraceCode({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div className="space-y-0.5">
+      <div className="text-[10px] font-medium text-muted-foreground">
+        {label}
+      </div>
+      <CodeBlockMini code={traceFieldCode(value)} language="json" />
+    </div>
+  );
+}
+
+function SubagentStepRow({ step }: { step: SubagentStepData }) {
+  return (
+    <Collapsible className="rounded border border-border/40">
+      <CollapsibleTrigger
+        className={cn(
+          "flex w-full items-center gap-2 px-2 py-1 text-left font-mono text-[11px]",
+          "hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          "group/step",
+        )}
+      >
+        <HugeiconsIcon
+          icon={ArrowRight01Icon}
+          size={10}
+          strokeWidth={2}
+          className="shrink-0 text-muted-foreground transition-transform group-data-[state=open]/step:rotate-90"
+        />
+        <span className="shrink-0 text-foreground">{step.toolName}</span>
+        <span className="flex-1" />
+        <span className="shrink-0 text-muted-foreground">
+          {step.durationMs}ms
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="neira-collapsible-content">
+        <div className="space-y-1.5 border-t border-border/40 px-2 py-1.5">
+          <LabeledTraceCode label="Input" value={step.input} />
+          <LabeledTraceCode label="Output" value={step.output} />
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 function BashRunOutput({ data }: { data: Record<string, unknown> }) {

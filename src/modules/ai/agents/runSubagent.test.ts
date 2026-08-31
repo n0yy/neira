@@ -66,4 +66,110 @@ describe("runSubagent", () => {
 
     expect(generateTextMock).toHaveBeenCalledTimes(1);
   });
+
+  it("captures a step trace (tool name, input, output, duration) instead of discarding it", async () => {
+    generateTextMock.mockResolvedValue({
+      text: "done",
+      steps: [
+        {
+          stepNumber: 0,
+          toolCalls: [
+            { toolCallId: "c1", toolName: "grep", input: { pattern: "foo" } },
+          ],
+          toolResults: [
+            { toolCallId: "c1", toolName: "grep", output: { hits: [] } },
+          ],
+        },
+      ],
+    });
+
+    const r = await runSubagent({
+      type: "explore",
+      prompt: "find foo",
+      keys: { openai: "test-key" } as never,
+      modelId: "gpt-5.6",
+      toolContext: makeContext(),
+    } as never);
+
+    expect(r.steps).toEqual([
+      {
+        toolName: "grep",
+        input: { pattern: "foo" },
+        output: { hits: [] },
+        durationMs: expect.any(Number),
+      },
+    ]);
+  });
+
+  it("truncates step input/output that would otherwise bloat the persisted trace", async () => {
+    const huge = "x".repeat(10_000);
+    generateTextMock.mockResolvedValue({
+      text: "done",
+      steps: [
+        {
+          stepNumber: 0,
+          toolCalls: [
+            { toolCallId: "c1", toolName: "read_file", input: { path: huge } },
+          ],
+          toolResults: [
+            {
+              toolCallId: "c1",
+              toolName: "read_file",
+              output: { content: huge },
+            },
+          ],
+        },
+      ],
+    });
+
+    const r = await runSubagent({
+      type: "explore",
+      prompt: "read a huge file",
+      keys: { openai: "test-key" } as never,
+      modelId: "gpt-5.6",
+      toolContext: makeContext(),
+    } as never);
+
+    const [step] = r.steps;
+    expect(JSON.stringify(step.input).length).toBeLessThan(5_000);
+    expect(JSON.stringify(step.output).length).toBeLessThan(5_000);
+  });
+
+  it("matches each tool call to its own result when a step makes several calls", async () => {
+    generateTextMock.mockResolvedValue({
+      text: "done",
+      steps: [
+        {
+          stepNumber: 0,
+          toolCalls: [
+            { toolCallId: "c1", toolName: "grep", input: { pattern: "a" } },
+            { toolCallId: "c2", toolName: "glob", input: { pattern: "b" } },
+          ],
+          toolResults: [
+            { toolCallId: "c2", toolName: "glob", output: { matches: [] } },
+            { toolCallId: "c1", toolName: "grep", output: { hits: [] } },
+          ],
+        },
+      ],
+    });
+
+    const r = await runSubagent({
+      type: "explore",
+      prompt: "search two ways",
+      keys: { openai: "test-key" } as never,
+      modelId: "gpt-5.6",
+      toolContext: makeContext(),
+    } as never);
+
+    expect(r.steps).toEqual([
+      expect.objectContaining({
+        toolName: "grep",
+        output: { hits: [] },
+      }),
+      expect.objectContaining({
+        toolName: "glob",
+        output: { matches: [] },
+      }),
+    ]);
+  });
 });

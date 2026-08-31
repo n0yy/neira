@@ -13,6 +13,11 @@ import { buildSearchTools } from "../tools/search";
 import { SUBAGENTS, type SubagentType } from "./registry";
 
 const SUBAGENT_MAX_STEPS = 12;
+// Cap per-field size in the persisted step trace so a single huge tool
+// input/output (e.g. read_file on a large file) can't bloat
+// neira-sessions.json. The caller-facing summary is unaffected — this only
+// truncates what the human-facing step trace stores.
+const MAX_TRACE_FIELD_CHARS = 4000;
 
 type Args = {
   type: SubagentType;
@@ -23,11 +28,39 @@ type Args = {
   onStep?: (label: string) => void;
 } & LocalProviderConfig;
 
+export type SubagentStep = {
+  toolName: string;
+  input: unknown;
+  output: unknown;
+  durationMs: number;
+};
+
 type RunResult = {
   summary: string;
   stepCount: number;
   durationMs: number;
+  steps: SubagentStep[];
 };
+
+function truncateForTrace(value: unknown): unknown {
+  if (value === undefined) return value;
+  let str: string;
+  if (typeof value === "string") {
+    str = value;
+  } else {
+    try {
+      str = JSON.stringify(value) ?? String(value);
+    } catch {
+      // Circular references, BigInt, etc. — fall back to a best-effort
+      // string rather than letting this throw and lose the whole trace
+      // (and the already-successful summary) to the caller's catch block.
+      str = String(value);
+    }
+  }
+  if (str.length <= MAX_TRACE_FIELD_CHARS) return value;
+  const preview = `${str.slice(0, MAX_TRACE_FIELD_CHARS)}… (truncated)`;
+  return typeof value === "string" ? preview : { truncated: true, preview };
+}
 
 export async function runSubagent({
   type,
@@ -61,6 +94,8 @@ export async function runSubagent({
   const model = await buildConfiguredLanguageModel(modelId, keys, local);
 
   const start = Date.now();
+  let lastStepAt = start;
+  const stepDurations: number[] = [];
   const result = await generateText({
     model,
     system: def.systemPrompt,
@@ -68,16 +103,43 @@ export async function runSubagent({
     tools: tools as Parameters<typeof generateText>[0]["tools"],
     stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
     onStepFinish: (step) => {
+      const now = Date.now();
+      stepDurations[step.stepNumber] = now - lastStepAt;
+      lastStepAt = now;
       if (!onStep) return;
       const last = step.toolCalls?.[step.toolCalls.length - 1];
       if (last) onStep(`${type}: ${last.toolName}`);
     },
   });
 
+  const steps: SubagentStep[] = [];
+  for (const step of result.steps ?? []) {
+    const calls = step.toolCalls ?? [];
+    // The AI SDK only times the step as a whole, not individual tool calls
+    // within it. When a step makes several calls in parallel, split the
+    // step's duration evenly rather than showing the same full duration on
+    // every row (misleadingly implying each call alone took that long).
+    const perCallDurationMs = calls.length
+      ? (stepDurations[step.stepNumber] ?? 0) / calls.length
+      : 0;
+    for (const call of calls) {
+      const toolResult = step.toolResults?.find(
+        (r) => r.toolCallId === call.toolCallId,
+      );
+      steps.push({
+        toolName: call.toolName,
+        input: truncateForTrace(call.input),
+        output: truncateForTrace(toolResult?.output),
+        durationMs: Math.round(perCallDurationMs),
+      });
+    }
+  }
+
   return {
     summary: result.text || "(no output)",
     stepCount: result.steps?.length ?? 0,
     durationMs: Date.now() - start,
+    steps,
   };
 }
 
