@@ -10,12 +10,31 @@ import { usePreferencesStore } from "@/modules/settings/preferences";
 import type { UIMessage } from "@ai-sdk/react";
 import { useMemo, useState } from "react";
 import {
+  endpointIdFromCompatModel,
   estimateCost,
   getModel,
   getModelContextLimit,
+  isCompatModelId,
+  type CustomEndpoint,
   type ModelId,
 } from "../config";
 import { useChatStore } from "../store/chatStore";
+
+// Named custom endpoints each carry their own `contextLimit` (set in
+// Settings -> Models). The legacy `openaiCompatibleContextLimit` preference
+// predates multi-endpoint support and only covers the single-endpoint
+// case, so it must never override a named endpoint's own value.
+export function resolveContextMax(
+  modelId: string,
+  customEndpoints: readonly CustomEndpoint[],
+  legacyCompatLimit: number,
+): number {
+  const compatOverride = isCompatModelId(modelId)
+    ? customEndpoints.find((e) => e.id === endpointIdFromCompatModel(modelId))
+        ?.contextLimit
+    : legacyCompatLimit;
+  return getModelContextLimit(modelId, compatOverride);
+}
 
 function estimateTokens(messages: UIMessage[]): number {
   let chars = 0;
@@ -61,7 +80,12 @@ export function ContextIndicator({
   const openaiCompatibleContextLimit = usePreferencesStore(
     (s) => s.openaiCompatibleContextLimit,
   );
-  const max = getModelContextLimit(modelId, openaiCompatibleContextLimit);
+  const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
+  const max = resolveContextMax(
+    modelId,
+    customEndpoints,
+    openaiCompatibleContextLimit,
+  );
   const modelLabel = useMemo(() => {
     try {
       return getModel(modelId as ModelId).label;
