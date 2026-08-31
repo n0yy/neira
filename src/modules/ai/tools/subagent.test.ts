@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolContext } from "./context";
 
 const runSubagentMock = vi.hoisted(() => vi.fn());
+const appendLiveSubagentStepMock = vi.hoisted(() => vi.fn());
+const clearLiveSubagentTraceMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../agents/runSubagent", () => ({ runSubagent: runSubagentMock }));
 vi.mock("../store/chatStore", () => ({
@@ -12,6 +14,8 @@ vi.mock("../store/chatStore", () => ({
       selectedModelId: "compat-db5061e3",
       customEndpointKeys: { db5061e3: "ep-key" },
       patchAgentMeta: vi.fn(),
+      appendLiveSubagentStep: appendLiveSubagentStepMock,
+      clearLiveSubagentTrace: clearLiveSubagentTraceMock,
     }),
   },
 }));
@@ -125,5 +129,73 @@ describe("run_subagent", () => {
         customEndpointKeys: { db5061e3: "ep-key" },
       }),
     );
+  });
+
+  it("mirrors each live step into the chat store keyed by this call's toolCallId", async () => {
+    runSubagentMock.mockImplementation(async ({ onStepTrace }) => {
+      onStepTrace?.({
+        toolName: "grep",
+        input: { pattern: "x" },
+        output: { hits: [] },
+        durationMs: 12,
+      });
+      return { summary: "done", stepCount: 1, durationMs: 12, steps: [] };
+    });
+
+    await run({ type: "reviewer", prompt: "review it" });
+
+    expect(appendLiveSubagentStepMock).toHaveBeenCalledWith("tool-call", {
+      toolName: "grep",
+      input: { pattern: "x" },
+      output: { hits: [] },
+      durationMs: 12,
+    });
+  });
+
+  it("clears this call's live trace once it settles, on both success and failure", async () => {
+    runSubagentMock.mockResolvedValue({
+      summary: "done",
+      stepCount: 0,
+      durationMs: 0,
+      steps: [],
+    });
+    await run({ type: "reviewer", prompt: "review it" });
+    expect(clearLiveSubagentTraceMock).toHaveBeenCalledWith("tool-call");
+
+    clearLiveSubagentTraceMock.mockClear();
+    runSubagentMock.mockRejectedValue(new Error("boom"));
+    await run({ type: "reviewer", prompt: "review it" });
+    expect(clearLiveSubagentTraceMock).toHaveBeenCalledWith("tool-call");
+  });
+
+  it("strips the step trace before it reaches the calling Agent's own context", async () => {
+    const { toModelOutput } = buildSubagentTools(makeContext()).run_subagent;
+    if (!toModelOutput) throw new Error("run_subagent has no toModelOutput");
+
+    const modelOutput = await toModelOutput({
+      toolCallId: "tool-call",
+      input: { type: "explore", prompt: "review it" },
+      output: {
+        type: "explore",
+        description: "card",
+        summary: "done",
+        stepCount: 2,
+        durationMs: 100,
+        steps: [
+          { toolName: "grep", input: { pattern: "x" }, output: { hits: [] }, durationMs: 10 },
+        ],
+      },
+    });
+
+    expect(modelOutput).toEqual({
+      type: "json",
+      value: {
+        type: "explore",
+        description: "card",
+        summary: "done",
+        stepCount: 2,
+        durationMs: 100,
+      },
+    });
   });
 });

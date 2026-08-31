@@ -27,7 +27,7 @@ import { useChatStore } from "@/modules/ai/store/chatStore";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import type { ComponentProps, ReactNode } from "react";
-import { isValidElement, memo, useState } from "react";
+import { isValidElement, memo, useRef, useState } from "react";
 
 
 export type ToolPart = ToolUIPart | DynamicToolUIPart;
@@ -119,6 +119,7 @@ export type ToolProps = ComponentProps<typeof Collapsible> & {
   input?: unknown;
   output?: unknown;
   errorText?: string;
+  toolCallId?: string;
 };
 
 // Tools whose `input` carries large/streaming content (file bodies, sub-
@@ -142,6 +143,7 @@ const ToolImpl = ({
   output,
   errorText,
   defaultOpen,
+  toolCallId,
   ...props
 }: ToolProps) => {
   const meta = TOOL_META[toolName];
@@ -159,8 +161,29 @@ const ToolImpl = ({
   const showInputBody = !isHeavy && Boolean(input);
   const showOutputBody =
     (!isHeavy || toolName === "run_subagent") && output !== undefined;
+
+  // While a run_subagent call is still in flight (no `output` yet), mirror
+  // its live step trace from chatStore — see runSubagent's onStepTrace and
+  // ADR 0003. subagent.ts clears the live entry the instant the run settles
+  // (so the map doesn't grow unbounded over a long session), which lands
+  // slightly before this part's own `output` reaches the UI through the AI
+  // SDK's message state. Keep the last non-empty snapshot around across
+  // that gap so the panel doesn't flicker empty right as the run finishes —
+  // `output`, once it arrives, replaces it outright.
+  const isSubagentRunning = toolName === "run_subagent" && output === undefined;
+  const liveSteps = useChatStore((s) =>
+    isSubagentRunning && toolCallId
+      ? s.liveSubagentTraces[toolCallId]
+      : undefined,
+  );
+  const lastLiveStepsRef = useRef<SubagentStepData[] | undefined>(undefined);
+  if (liveSteps && liveSteps.length > 0) lastLiveStepsRef.current = liveSteps;
+  if (!isSubagentRunning) lastLiveStepsRef.current = undefined;
+  const displaySteps = liveSteps?.length ? liveSteps : lastLiveStepsRef.current;
+  const hasLiveSteps = isSubagentRunning && Boolean(displaySteps?.length);
+
   const hasDetails =
-    showInputBody || showOutputBody || Boolean(errorText);
+    showInputBody || showOutputBody || Boolean(errorText) || hasLiveSteps;
 
   return (
     <Collapsible
@@ -209,6 +232,9 @@ const ToolImpl = ({
           <div className="ml-3 mt-1 space-y-2 border-l border-border/60 pl-3 pb-1">
             {showInputBody ? (
               <ToolInput toolName={toolName} input={input} />
+            ) : null}
+            {hasLiveSteps && displaySteps ? (
+              <SubagentLiveTrace steps={displaySteps} />
             ) : null}
             {showOutputBody || errorText ? (
               <ToolOutput
@@ -594,6 +620,26 @@ type SubagentStepData = {
   output: unknown;
   durationMs: number;
 };
+
+// Steps as they arrive while the subagent is still running, mirrored live
+// from chatStore's liveSubagentTraces (see runSubagent's onStepTrace).
+function SubagentLiveTrace({ steps }: { steps: SubagentStepData[] }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+        <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+        running…
+      </div>
+      <div className="space-y-0.5">
+        {steps.map((s, idx) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: steps are an
+          // append-only, never-reordered trace for this one tool call.
+          <SubagentStepRow key={idx} step={s} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // The subagent's step trace: user-facing only, never fed back into the
 // calling Agent's context (see CONTEXT.md "Step trace" and ADR 0003).

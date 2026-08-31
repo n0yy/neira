@@ -26,6 +26,12 @@ type Args = {
   modelId: string;
   toolContext: ToolContext;
   onStep?: (label: string) => void;
+  /** Fired once per tool call, as soon as it finishes — before the whole
+   * subagent run resolves — so the caller can mirror it into a live,
+   * per-toolCallId trace. Emits the exact same SubagentStep that ends up in
+   * the final `steps` array, so a live view and the persisted trace never
+   * disagree. */
+  onStepTrace?: (step: SubagentStep) => void;
 } & LocalProviderConfig;
 
 export type SubagentStep = {
@@ -44,22 +50,27 @@ type RunResult = {
 
 function truncateForTrace(value: unknown): unknown {
   if (value === undefined) return value;
-  let str: string;
   if (typeof value === "string") {
-    str = value;
-  } else {
-    try {
-      str = JSON.stringify(value) ?? String(value);
-    } catch {
-      // Circular references, BigInt, etc. — fall back to a best-effort
-      // string rather than letting this throw and lose the whole trace
-      // (and the already-successful summary) to the caller's catch block.
-      str = String(value);
-    }
+    if (value.length <= MAX_TRACE_FIELD_CHARS) return value;
+    return `${value.slice(0, MAX_TRACE_FIELD_CHARS)}… (truncated)`;
+  }
+
+  let str: string;
+  try {
+    str = JSON.stringify(value) ?? String(value);
+  } catch {
+    // Circular references, BigInt, etc. — this value can never be
+    // JSON-serialized as-is, so replace it outright (not just when it's
+    // over the length cap) rather than letting the original, still-unsafe
+    // value flow into the persisted trace and blow up JSON.stringify again
+    // when the whole session gets saved.
+    return { truncated: true, preview: `${String(value)} (unserializable)` };
   }
   if (str.length <= MAX_TRACE_FIELD_CHARS) return value;
-  const preview = `${str.slice(0, MAX_TRACE_FIELD_CHARS)}… (truncated)`;
-  return typeof value === "string" ? preview : { truncated: true, preview };
+  return {
+    truncated: true,
+    preview: `${str.slice(0, MAX_TRACE_FIELD_CHARS)}… (truncated)`,
+  };
 }
 
 export async function runSubagent({
@@ -69,6 +80,7 @@ export async function runSubagent({
   modelId,
   toolContext,
   onStep,
+  onStepTrace,
   ...local
 }: Args): Promise<RunResult> {
   const def = SUBAGENTS[type];
@@ -95,7 +107,7 @@ export async function runSubagent({
 
   const start = Date.now();
   let lastStepAt = start;
-  const stepDurations: number[] = [];
+  const steps: SubagentStep[] = [];
   const result = await generateText({
     model,
     system: def.systemPrompt,
@@ -104,36 +116,38 @@ export async function runSubagent({
     stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
     onStepFinish: (step) => {
       const now = Date.now();
-      stepDurations[step.stepNumber] = now - lastStepAt;
+      const stepDurationMs = now - lastStepAt;
       lastStepAt = now;
-      if (!onStep) return;
-      const last = step.toolCalls?.[step.toolCalls.length - 1];
-      if (last) onStep(`${type}: ${last.toolName}`);
+
+      const calls = step.toolCalls ?? [];
+      // The AI SDK only times the step as a whole, not individual tool
+      // calls within it. When a step makes several calls in parallel,
+      // split the step's duration evenly rather than showing the same
+      // full duration on every row (misleadingly implying each call alone
+      // took that long).
+      const perCallDurationMs = calls.length
+        ? stepDurationMs / calls.length
+        : 0;
+      for (const call of calls) {
+        const toolResult = step.toolResults?.find(
+          (r) => r.toolCallId === call.toolCallId,
+        );
+        const traceStep: SubagentStep = {
+          toolName: call.toolName,
+          input: truncateForTrace(call.input),
+          output: truncateForTrace(toolResult?.output),
+          durationMs: Math.round(perCallDurationMs),
+        };
+        steps.push(traceStep);
+        onStepTrace?.(traceStep);
+      }
+
+      if (onStep) {
+        const last = calls[calls.length - 1];
+        if (last) onStep(`${type}: ${last.toolName}`);
+      }
     },
   });
-
-  const steps: SubagentStep[] = [];
-  for (const step of result.steps ?? []) {
-    const calls = step.toolCalls ?? [];
-    // The AI SDK only times the step as a whole, not individual tool calls
-    // within it. When a step makes several calls in parallel, split the
-    // step's duration evenly rather than showing the same full duration on
-    // every row (misleadingly implying each call alone took that long).
-    const perCallDurationMs = calls.length
-      ? (stepDurations[step.stepNumber] ?? 0) / calls.length
-      : 0;
-    for (const call of calls) {
-      const toolResult = step.toolResults?.find(
-        (r) => r.toolCallId === call.toolCallId,
-      );
-      steps.push({
-        toolName: call.toolName,
-        input: truncateForTrace(call.input),
-        output: truncateForTrace(toolResult?.output),
-        durationMs: Math.round(perCallDurationMs),
-      });
-    }
-  }
 
   return {
     summary: result.text || "(no output)",

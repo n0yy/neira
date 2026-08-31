@@ -16,7 +16,7 @@ vi.mock("../tools/fs", () => ({ buildFsTools: () => ({}) }));
 vi.mock("../tools/search", () => ({ buildSearchTools: () => ({}) }));
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { runSubagent } from "./runSubagent";
+import { runSubagent, type SubagentStep } from "./runSubagent";
 
 function makeContext(): ToolContext {
   return {
@@ -33,9 +33,26 @@ function makeContext(): ToolContext {
   } as unknown as ToolContext;
 }
 
+// Mirrors what the real `generateText` does: invoke `onStepFinish` once per
+// step (in order) before resolving with the full `steps` array. Tests that
+// only care about the final result can pass steps with no toolCalls.
+function mockGenerateText(
+  // biome-ignore lint/suspicious/noExplicitAny: test double for AI SDK steps
+  steps: any[],
+  text = "done",
+) {
+  generateTextMock.mockImplementation(
+    // biome-ignore lint/suspicious/noExplicitAny: test double for AI SDK config
+    async (config: any) => {
+      for (const step of steps) config.onStepFinish?.(step);
+      return { text, steps };
+    },
+  );
+}
+
 beforeEach(() => {
   generateTextMock.mockReset();
-  generateTextMock.mockResolvedValue({ text: "done", steps: [{}] });
+  mockGenerateText([{ stepNumber: 0, toolCalls: [], toolResults: [] }]);
 });
 
 describe("runSubagent", () => {
@@ -68,20 +85,17 @@ describe("runSubagent", () => {
   });
 
   it("captures a step trace (tool name, input, output, duration) instead of discarding it", async () => {
-    generateTextMock.mockResolvedValue({
-      text: "done",
-      steps: [
-        {
-          stepNumber: 0,
-          toolCalls: [
-            { toolCallId: "c1", toolName: "grep", input: { pattern: "foo" } },
-          ],
-          toolResults: [
-            { toolCallId: "c1", toolName: "grep", output: { hits: [] } },
-          ],
-        },
-      ],
-    });
+    mockGenerateText([
+      {
+        stepNumber: 0,
+        toolCalls: [
+          { toolCallId: "c1", toolName: "grep", input: { pattern: "foo" } },
+        ],
+        toolResults: [
+          { toolCallId: "c1", toolName: "grep", output: { hits: [] } },
+        ],
+      },
+    ]);
 
     const r = await runSubagent({
       type: "explore",
@@ -103,24 +117,21 @@ describe("runSubagent", () => {
 
   it("truncates step input/output that would otherwise bloat the persisted trace", async () => {
     const huge = "x".repeat(10_000);
-    generateTextMock.mockResolvedValue({
-      text: "done",
-      steps: [
-        {
-          stepNumber: 0,
-          toolCalls: [
-            { toolCallId: "c1", toolName: "read_file", input: { path: huge } },
-          ],
-          toolResults: [
-            {
-              toolCallId: "c1",
-              toolName: "read_file",
-              output: { content: huge },
-            },
-          ],
-        },
-      ],
-    });
+    mockGenerateText([
+      {
+        stepNumber: 0,
+        toolCalls: [
+          { toolCallId: "c1", toolName: "read_file", input: { path: huge } },
+        ],
+        toolResults: [
+          {
+            toolCallId: "c1",
+            toolName: "read_file",
+            output: { content: huge },
+          },
+        ],
+      },
+    ]);
 
     const r = await runSubagent({
       type: "explore",
@@ -135,23 +146,53 @@ describe("runSubagent", () => {
     expect(JSON.stringify(step.output).length).toBeLessThan(5_000);
   });
 
+  it("replaces a non-JSON-serializable output (circular reference) instead of passing it through unsafe", async () => {
+    const circular: Record<string, unknown> = { a: 1 };
+    circular.self = circular;
+    mockGenerateText([
+      {
+        stepNumber: 0,
+        toolCalls: [
+          { toolCallId: "c1", toolName: "grep", input: { pattern: "a" } },
+        ],
+        toolResults: [
+          { toolCallId: "c1", toolName: "grep", output: circular },
+        ],
+      },
+    ]);
+
+    const r = await runSubagent({
+      type: "explore",
+      prompt: "find foo",
+      keys: { openai: "test-key" } as never,
+      modelId: "gpt-5.6",
+      toolContext: makeContext(),
+    } as never);
+
+    // Must not throw when the persisted trace is later JSON.stringify'd for
+    // the session file, and must not silently keep the untruncated original.
+    expect(() => JSON.stringify(r.steps)).not.toThrow();
+    const [step] = r.steps;
+    expect(step.output).not.toBe(circular);
+    expect(step.output).toEqual(
+      expect.objectContaining({ truncated: true }),
+    );
+  });
+
   it("matches each tool call to its own result when a step makes several calls", async () => {
-    generateTextMock.mockResolvedValue({
-      text: "done",
-      steps: [
-        {
-          stepNumber: 0,
-          toolCalls: [
-            { toolCallId: "c1", toolName: "grep", input: { pattern: "a" } },
-            { toolCallId: "c2", toolName: "glob", input: { pattern: "b" } },
-          ],
-          toolResults: [
-            { toolCallId: "c2", toolName: "glob", output: { matches: [] } },
-            { toolCallId: "c1", toolName: "grep", output: { hits: [] } },
-          ],
-        },
-      ],
-    });
+    mockGenerateText([
+      {
+        stepNumber: 0,
+        toolCalls: [
+          { toolCallId: "c1", toolName: "grep", input: { pattern: "a" } },
+          { toolCallId: "c2", toolName: "glob", input: { pattern: "b" } },
+        ],
+        toolResults: [
+          { toolCallId: "c2", toolName: "glob", output: { matches: [] } },
+          { toolCallId: "c1", toolName: "grep", output: { hits: [] } },
+        ],
+      },
+    ]);
 
     const r = await runSubagent({
       type: "explore",
@@ -171,5 +212,45 @@ describe("runSubagent", () => {
         output: { matches: [] },
       }),
     ]);
+  });
+
+  it("emits onStepTrace live, once per tool call, matching the final steps exactly", async () => {
+    mockGenerateText([
+      {
+        stepNumber: 0,
+        toolCalls: [
+          { toolCallId: "c1", toolName: "grep", input: { pattern: "a" } },
+        ],
+        toolResults: [
+          { toolCallId: "c1", toolName: "grep", output: { hits: [] } },
+        ],
+      },
+      {
+        stepNumber: 1,
+        toolCalls: [
+          { toolCallId: "c2", toolName: "read_file", input: { path: "x" } },
+        ],
+        toolResults: [
+          { toolCallId: "c2", toolName: "read_file", output: { content: "y" } },
+        ],
+      },
+    ]);
+
+    const seen: unknown[] = [];
+    const r = await runSubagent({
+      type: "explore",
+      prompt: "search then read",
+      keys: { openai: "test-key" } as never,
+      modelId: "gpt-5.6",
+      toolContext: makeContext(),
+      onStepTrace: (step: SubagentStep) => seen.push(step),
+    } as never);
+
+    // Live emission happened for both steps, in order, before the promise
+    // resolved — and it's the exact same data as the final persisted trace,
+    // so a live view handing off to the persisted one has nothing to
+    // duplicate or lose.
+    expect(seen).toEqual(r.steps);
+    expect(seen).toHaveLength(2);
   });
 });

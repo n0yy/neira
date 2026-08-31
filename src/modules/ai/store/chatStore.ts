@@ -24,6 +24,7 @@ import {
   type SessionMeta,
 } from "../lib/sessions";
 import { pushRecentModel } from "../lib/modelPrefs";
+import type { SubagentStep } from "../agents/runSubagent";
 
 export type Live = {
   getCwd: () => string | null;
@@ -137,6 +138,15 @@ type StoreState = {
   agentMeta: AgentMeta;
   patchAgentMeta: (patch: Partial<AgentMeta>) => void;
   resetAgentMeta: () => void;
+
+  // Live, per-toolCallId step trace for subagents that are still running —
+  // see CONTEXT.md "Step trace" and ADR 0003. Keyed rather than a single
+  // shared field so multiple subagents spawned in the same turn each get
+  // their own independently updating trace. Cleared once a run finishes,
+  // handing off to the persisted trace on the tool-call's own output.
+  liveSubagentTraces: Record<string, SubagentStep[]>;
+  appendLiveSubagentStep: (toolCallId: string, step: SubagentStep) => void;
+  clearLiveSubagentTrace: (toolCallId: string) => void;
 
   // Sessions
   sessionsHydrated: boolean;
@@ -278,7 +288,22 @@ export const useChatStore = create<StoreState>((set, get) => ({
   agentMeta: IDLE_META,
   patchAgentMeta: (patch) =>
     set((s) => ({ agentMeta: { ...s.agentMeta, ...patch } })),
-  resetAgentMeta: () => set({ agentMeta: IDLE_META }),
+  resetAgentMeta: () => set({ agentMeta: IDLE_META, liveSubagentTraces: {} }),
+
+  liveSubagentTraces: {},
+  appendLiveSubagentStep: (toolCallId, step) =>
+    set((s) => ({
+      liveSubagentTraces: {
+        ...s.liveSubagentTraces,
+        [toolCallId]: [...(s.liveSubagentTraces[toolCallId] ?? []), step],
+      },
+    })),
+  clearLiveSubagentTrace: (toolCallId) =>
+    set((s) => {
+      if (!(toolCallId in s.liveSubagentTraces)) return s;
+      const { [toolCallId]: _removed, ...rest } = s.liveSubagentTraces;
+      return { liveSubagentTraces: rest };
+    }),
 
   sessionsHydrated: false,
   sessions: [],
@@ -326,7 +351,7 @@ export const useChatStore = create<StoreState>((set, get) => ({
       updatedAt: Date.now(),
     };
     const next = [meta, ...get().sessions];
-    set({ sessions: next, activeSessionId: id, agentMeta: IDLE_META });
+    set({ sessions: next, activeSessionId: id, agentMeta: IDLE_META, liveSubagentTraces: {} });
     void saveSessionsList(next);
     void saveActiveId(id);
     return id;
@@ -339,7 +364,7 @@ export const useChatStore = create<StoreState>((set, get) => ({
     // Lazily seed the chat with persisted messages the first time we open
     // this session. Subsequent switches reuse the cached Chat instance.
     const flip = () => {
-      set({ activeSessionId: id, agentMeta: IDLE_META });
+      set({ activeSessionId: id, agentMeta: IDLE_META, liveSubagentTraces: {} });
       void saveActiveId(id);
     };
     if (chats.has(id) || seedMessages.has(id)) {
