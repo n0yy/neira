@@ -8,8 +8,13 @@ import {
 } from "@/components/ai-elements/context";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import type { UIMessage } from "@ai-sdk/react";
-import { useMemo } from "react";
-import { estimateCost, getModel, getModelContextLimit, type ModelId } from "../config";
+import { useMemo, useState } from "react";
+import {
+  estimateCost,
+  getModel,
+  getModelContextLimit,
+  type ModelId,
+} from "../config";
 import { useChatStore } from "../store/chatStore";
 
 function estimateTokens(messages: UIMessage[]): number {
@@ -69,76 +74,93 @@ export function ContextIndicator({
     tokens.inputTokens > 0
       ? Math.round((tokens.cachedInputTokens / tokens.inputTokens) * 100)
       : 0;
+  // HoverCardContent portals to document.body by default, which sits
+  // outside any CSS-`zoom`-scaled ancestor (the AI dock panel is one).
+  // Anchoring the portal to this wrapper instead keeps the trigger and the
+  // hover card in the same zoom context (same fix as AgentSwitcher's
+  // dropdown, see DropdownMenuContent's `container` prop).
+  const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
 
   return (
-    <Context usedTokens={used} maxTokens={max}>
-      <ContextTrigger className={triggerClassName ?? "h-6 gap-1 px-0 text-[10.5px]"} />
-      <ContextContent className="w-64 text-[11px]">
-        <ContextContentHeader />
-        <ContextContentBody>
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span>Model</span>
-            <span className="font-mono text-foreground">{modelLabel}</span>
-          </div>
-          <div className="mt-1 flex items-center justify-between text-muted-foreground">
-            <span>{lastInput > 0 ? "Last request" : "Estimated context"}</span>
-            <span className="font-mono text-foreground">
-              {formatTokens(used)}
-            </span>
-          </div>
-          {lastCached > 0 && (
+    <div ref={setAnchor} className="contents">
+      <Context usedTokens={used} maxTokens={max}>
+        <ContextTrigger
+          className={triggerClassName ?? "h-6 gap-1 px-0 text-[10.5px]"}
+        />
+        <ContextContent
+          className="w-64 text-[11px]"
+          container={anchor ?? undefined}
+        >
+          <ContextContentHeader />
+          <ContextContentBody>
             <div className="flex items-center justify-between text-muted-foreground">
-              <span>Of which cached</span>
+              <span>Model</span>
+              <span className="font-mono text-foreground">{modelLabel}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-muted-foreground">
+              <span>
+                {lastInput > 0 ? "Last request" : "Estimated context"}
+              </span>
               <span className="font-mono text-foreground">
-                {formatTokens(lastCached)}
+                {formatTokens(used)}
               </span>
             </div>
-          )}
-          {reported > 0 && (
-            <>
-              <div className="mt-1.5 flex items-center justify-between text-muted-foreground">
-                <span>Session input</span>
-                <span className="font-mono text-foreground">
-                  {formatTokens(tokens.inputTokens)}
-                </span>
-              </div>
+            {lastCached > 0 && (
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>Session output</span>
+                <span>Of which cached</span>
                 <span className="font-mono text-foreground">
-                  {formatTokens(tokens.outputTokens)}
+                  {formatTokens(lastCached)}
                 </span>
               </div>
-              {tokens.cachedInputTokens > 0 && (
-                <div className="flex items-center justify-between text-muted-foreground">
-                  <span>Cache hit</span>
-                  <span className="font-mono text-foreground">{cacheRate}%</span>
-                </div>
-              )}
-              {cost != null && (
-                <div className="flex items-center justify-between text-muted-foreground">
-                  <span>Session cost</span>
+            )}
+            {reported > 0 && (
+              <>
+                <div className="mt-1.5 flex items-center justify-between text-muted-foreground">
+                  <span>Session input</span>
                   <span className="font-mono text-foreground">
-                    ${cost.toFixed(cost < 0.01 ? 4 : cost < 1 ? 3 : 2)}
+                    {formatTokens(tokens.inputTokens)}
                   </span>
                 </div>
-              )}
-            </>
-          )}
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span>Window</span>
-            <span className="font-mono text-foreground">
-              {formatTokens(max)}
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>Session output</span>
+                  <span className="font-mono text-foreground">
+                    {formatTokens(tokens.outputTokens)}
+                  </span>
+                </div>
+                {tokens.cachedInputTokens > 0 && (
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Cache hit</span>
+                    <span className="font-mono text-foreground">
+                      {cacheRate}%
+                    </span>
+                  </div>
+                )}
+                {cost != null && (
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Session cost</span>
+                    <span className="font-mono text-foreground">
+                      ${cost.toFixed(cost < 0.01 ? 4 : cost < 1 ? 3 : 2)}
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span>Window</span>
+              <span className="font-mono text-foreground">
+                {formatTokens(max)}
+              </span>
+            </div>
+          </ContextContentBody>
+          <ContextContentFooter>
+            <span className="text-[10px] italic text-muted-foreground">
+              {lastInput > 0
+                ? "Last request reflects current context size; session totals are cumulative."
+                : "Token count is approximate (chars / 4)."}
             </span>
-          </div>
-        </ContextContentBody>
-        <ContextContentFooter>
-          <span className="text-[10px] italic text-muted-foreground">
-            {lastInput > 0
-              ? "Last request reflects current context size; session totals are cumulative."
-              : "Token count is approximate (chars / 4)."}
-          </span>
-        </ContextContentFooter>
-      </ContextContent>
-    </Context>
+          </ContextContentFooter>
+        </ContextContent>
+      </Context>
+    </div>
   );
 }

@@ -21,10 +21,20 @@ function HoverCardContent({
   className,
   align = "center",
   sideOffset = 4,
+  container,
   ...props
-}: React.ComponentProps<typeof HoverCardPrimitive.Content>) {
+}: React.ComponentProps<typeof HoverCardPrimitive.Content> & {
+  /**
+   * Portal target. Defaults to `document.body`, which sits outside any
+   * ancestor using CSS `zoom` (see `.zoom-content` in globals.css); that
+   * split coordinate space is unreliable for trigger-relative positioning
+   * in WebKit. Pass the zoomed ancestor here to keep trigger and content
+   * in the same zoom context, mirroring DropdownMenuContent's `container`.
+   */
+  container?: React.ComponentProps<typeof HoverCardPrimitive.Portal>["container"];
+}) {
   return (
-    <HoverCardPrimitive.Portal data-slot="hover-card-portal">
+    <HoverCardPrimitive.Portal data-slot="hover-card-portal" container={container}>
       <HoverCardPrimitive.Content
         data-slot="hover-card-content"
         align={align}
