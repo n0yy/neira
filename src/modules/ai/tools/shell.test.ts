@@ -1,5 +1,6 @@
 import type { ToolExecutionOptions } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { PermissionMode } from "../lib/permissionMode";
 import type { ToolContext } from "./context";
 
 const nativeMock = vi.hoisted(() => ({
@@ -31,7 +32,10 @@ const toolOptions: ToolExecutionOptions = {
   messages: [],
 };
 
-function makeContext(sessionId: string | null = "session"): ToolContext {
+function makeContext(
+  sessionId: string | null = "session",
+  mode: PermissionMode = "manual",
+): ToolContext {
   return {
     getCwd: () => "/workspace",
     getWorkspaceRoot: () => "/workspace",
@@ -43,6 +47,7 @@ function makeContext(sessionId: string | null = "session"): ToolContext {
     readAgentOutput: () => null,
     readCache: new Map(),
     getSessionId: () => sessionId,
+    getPermissionMode: () => mode,
   } as unknown as ToolContext;
 }
 
@@ -64,10 +69,39 @@ async function run(
   return (await execute(input as never, toolOptions)) as unknown as Result;
 }
 
+type NeedsApproval =
+  | boolean
+  | ((input: never, opts: ToolExecutionOptions) => boolean | PromiseLike<boolean>)
+  | undefined;
+
+async function resolveApproval(na: NeedsApproval): Promise<boolean> {
+  return typeof na === "function" ? na({} as never, toolOptions) : Boolean(na);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   securityMock.checkShellCommand.mockReturnValue({ ok: true });
   nativeMock.shellSessionOpen.mockResolvedValue(1);
+});
+
+describe("bash_run/bash_background needsApproval", () => {
+  it("asks under manual, accept-edits, and plan", async () => {
+    for (const mode of ["manual", "accept-edits", "plan"] as const) {
+      const { bash_run, bash_background } = buildShellTools(
+        makeContext("session", mode),
+      );
+      expect(await resolveApproval(bash_run.needsApproval)).toBe(true);
+      expect(await resolveApproval(bash_background.needsApproval)).toBe(true);
+    }
+  });
+
+  it("does not ask under auto", async () => {
+    const { bash_run, bash_background } = buildShellTools(
+      makeContext("session", "auto"),
+    );
+    expect(await resolveApproval(bash_run.needsApproval)).toBe(false);
+    expect(await resolveApproval(bash_background.needsApproval)).toBe(false);
+  });
 });
 
 describe("bash_run", () => {

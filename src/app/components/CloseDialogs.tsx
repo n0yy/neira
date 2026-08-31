@@ -13,11 +13,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { OptOutRow } from "@/components/OptOutRow";
 import { setConfirmCloseRunningTerminal } from "@/modules/settings/store";
 import type { Tab } from "@/modules/tabs";
-import { useId, useState } from "react";
+import { useState } from "react";
 
 type Props = {
   tabs: Tab[];
@@ -51,31 +50,6 @@ function appCloseMessage(blocker: AppCloseBlocker): string {
     return `${dirty.charAt(0).toUpperCase()}${dirty.slice(1)}. Quitting will discard them.`;
   }
   return "A process is still running in a terminal. Quitting will terminate it.";
-}
-
-function OptOutRow({
-  checked,
-  onCheckedChange,
-}: {
-  checked: boolean;
-  onCheckedChange: (value: boolean) => void;
-}) {
-  const id = useId();
-  return (
-    <div className="-mt-3 flex items-center justify-center gap-2 sm:justify-start">
-      <Checkbox
-        id={id}
-        checked={checked}
-        onCheckedChange={(value) => onCheckedChange(value === true)}
-      />
-      <Label
-        htmlFor={id}
-        className="font-normal text-[12px] text-muted-foreground"
-      >
-        Don't ask again about running processes
-      </Label>
-    </div>
-  );
 }
 
 async function persistOptOut(): Promise<void> {
@@ -207,6 +181,7 @@ export function CloseDialogs({
           <OptOutRow
             checked={optOutTerminalClose}
             onCheckedChange={setOptOutTerminalClose}
+            label="Don't ask again about running processes"
           />
           <AlertDialogFooter>
             <AlertDialogCancel onClick={cancelTerminalClose}>
@@ -297,6 +272,7 @@ export function CloseDialogs({
             <OptOutRow
               checked={optOutAppClose}
               onCheckedChange={setOptOutAppClose}
+              label="Don't ask again about running processes"
             />
           ) : null}
           <AlertDialogFooter>

@@ -1,3 +1,14 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { OptOutRow } from "@/components/OptOutRow";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -38,8 +49,34 @@ export function PermissionModeSwitcher({
 }) {
   const mode = usePermissionModeStore((s) => s.mode);
   const setMode = usePermissionModeStore((s) => s.setMode);
+  const skipAutoConfirm = usePermissionModeStore((s) => s.skipAutoConfirm);
+  const setSkipAutoConfirm = usePermissionModeStore(
+    (s) => s.setSkipAutoConfirm,
+  );
   const ActiveIcon = ICONS[mode];
   const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
+  const [confirmingAuto, setConfirmingAuto] = useState(false);
+  const [dontAskAgain, setDontAskAgain] = useState(false);
+
+  const pick = (m: PermissionMode) => {
+    if (m === "auto" && !skipAutoConfirm) {
+      setConfirmingAuto(true);
+      return;
+    }
+    setMode(m);
+  };
+
+  const confirmAuto = () => {
+    if (dontAskAgain) setSkipAutoConfirm(true);
+    setDontAskAgain(false);
+    setConfirmingAuto(false);
+    setMode("auto");
+  };
+
+  const cancelAuto = () => {
+    setDontAskAgain(false);
+    setConfirmingAuto(false);
+  };
 
   return (
     <div ref={setAnchor} className="contents">
@@ -77,7 +114,7 @@ export function PermissionModeSwitcher({
             return (
               <DropdownMenuItem
                 key={m}
-                onSelect={() => setMode(m)}
+                onSelect={() => pick(m)}
                 className={cn(
                   "flex items-start gap-2 pr-2 text-[12px]",
                   m === mode && "bg-accent/40",
@@ -111,6 +148,32 @@ export function PermissionModeSwitcher({
           })}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <AlertDialog
+        open={confirmingAuto}
+        onOpenChange={(open) => !open && cancelAuto()}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch to Auto mode?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The AI can run shell commands and change files without asking,
+              in this workspace.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <OptOutRow
+            checked={dontAskAgain}
+            onCheckedChange={setDontAskAgain}
+            label="Don't ask again"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelAuto}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmAuto}>
+              Switch to Auto
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
