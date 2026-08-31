@@ -13,8 +13,12 @@ An AI model vendor (OpenAI, Anthropic, etc.) configured in Settings → Models v
 _Avoid_: Integration
 
 **Agent**:
-A selectable chat persona (e.g. Coder, Architect, Impact Analysis) — a system-prompt swap applied within the same conversation loop (`runAgentStream()`). No tool restriction and no context isolation: every Agent sees the same tool registry and the same message history.
+A selectable chat persona (e.g. Coder, Architect, Impact Analysis) — a system-prompt swap applied within the same conversation loop (`streamText` in `src/modules/ai/lib/agent.ts`). No tool restriction and no context isolation: every Agent sees the same tool registry and the same message history. Independent of Permission Mode — selecting an Agent never changes the active mode.
 _Avoid_: Persona, Mode, Variant
+
+**Permission Mode**:
+A per-conversation setting controlling whether a mutating tool (`write_file`, `create_directory`, `edit`, `multi_edit`, `bash_run`, `bash_background`, managed-agent tools) executes immediately or waits for the user to approve it via the AI SDK's `needsApproval` gate. Four values: **Manual** (default — every mutating tool call asks individually), **Accept Edits** (file-mutating tools auto-approve; shell and managed-agent tools still ask), **Auto** (every mutating tool auto-approves), **Plan** (mutating tools are omitted from the tool registry entirely — the model cannot call them at all). Stored globally and sticky, except it resets to Manual at the start of a new conversation unless the last active mode was Plan. Independent of Agent. The secret-path deny-list and shell-command heuristics in `security.ts` apply unconditionally in every mode, including Auto.
+_Avoid_: Mode alone (Neira also uses "mode" for editor/theme contexts elsewhere), Permission Level, Trust Level, Auto-approve (that's a value of this concept, not the concept itself)
 
 **Subagent**:
 An isolated, tool-restricted worker invoked via the `run_subagent` tool from within an Agent's turn. Runs its own `generateText` call with no parent message history and only a whitelisted tool set (its `SUBAGENTS` registry entry), returning a distilled summary — never the raw transcript — to the calling Agent's context. Its step trace remains visible to the human user via the UI (see Step trace). Cannot itself call `run_subagent` (no recursion).
