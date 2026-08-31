@@ -21,7 +21,7 @@ An isolated, tool-restricted worker invoked via the `run_subagent` tool from wit
 _Avoid_: Sub-agent, Explorer (a category of Subagent, not the general term)
 
 **Step trace**:
-The recorded sequence of tool calls (tool name, input, output, duration) a Subagent made during its run. Kept live while the Subagent is running and persisted alongside the parent session afterward, so the user can inspect it from the `run_subagent` tool card at any time. Distinct from the distilled summary, which is the only thing the calling Agent ever sees.
+The recorded sequence of a Subagent's tool calls (tool name, input, output, duration — duration is the tool's own execution time, not the surrounding model turn) interleaved with any reasoning segments it produced, in the order they happened during its run. Kept live while the Subagent is running and persisted alongside the parent session afterward, so the user can inspect it from the `run_subagent` tool card at any time, with reasoning segments rendered the same collapsible way as the main chat's reasoning. Distinct from the distilled summary, which is the only thing the calling Agent ever sees.
 _Avoid_: Transcript (reserved for the raw message history a Subagent explicitly never receives/returns to its caller), Activity log
 
 **Explorer**:

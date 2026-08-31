@@ -24,10 +24,15 @@ import {
   ToolsIcon,
 } from "@hugeicons/core-free-icons";
 import { useChatStore } from "@/modules/ai/store/chatStore";
+import type {
+  SubagentStep,
+  SubagentToolStep,
+} from "@/modules/ai/agents/runSubagent";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import type { ComponentProps, ReactNode } from "react";
 import { isValidElement, memo, useRef, useState } from "react";
+import { Reasoning, ReasoningContent, ReasoningTrigger } from "./reasoning";
 
 
 export type ToolPart = ToolUIPart | DynamicToolUIPart;
@@ -176,7 +181,7 @@ const ToolImpl = ({
       ? s.liveSubagentTraces[toolCallId]
       : undefined,
   );
-  const lastLiveStepsRef = useRef<SubagentStepData[] | undefined>(undefined);
+  const lastLiveStepsRef = useRef<SubagentStep[] | undefined>(undefined);
   if (liveSteps && liveSteps.length > 0) lastLiveStepsRef.current = liveSteps;
   if (!isSubagentRunning) lastLiveStepsRef.current = undefined;
   const displaySteps = liveSteps?.length ? liveSteps : lastLiveStepsRef.current;
@@ -614,16 +619,21 @@ function renderToolOutput(toolName: string, output: unknown): ReactNode | null {
   return null;
 }
 
-type SubagentStepData = {
-  toolName: string;
-  input: unknown;
-  output: unknown;
-  durationMs: number;
-};
+function SubagentStepEntry({ entry }: { entry: SubagentStep }) {
+  if (entry.kind === "reasoning") {
+    return (
+      <Reasoning isStreaming={false} defaultOpen={false}>
+        <ReasoningTrigger />
+        <ReasoningContent>{entry.text}</ReasoningContent>
+      </Reasoning>
+    );
+  }
+  return <SubagentStepRow step={entry} />;
+}
 
 // Steps as they arrive while the subagent is still running, mirrored live
 // from chatStore's liveSubagentTraces (see runSubagent's onStepTrace).
-function SubagentLiveTrace({ steps }: { steps: SubagentStepData[] }) {
+function SubagentLiveTrace({ steps }: { steps: SubagentStep[] }) {
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -634,7 +644,7 @@ function SubagentLiveTrace({ steps }: { steps: SubagentStepData[] }) {
         {steps.map((s, idx) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: steps are an
           // append-only, never-reordered trace for this one tool call.
-          <SubagentStepRow key={idx} step={s} />
+          <SubagentStepEntry key={idx} entry={s} />
         ))}
       </div>
     </div>
@@ -659,7 +669,7 @@ function SubagentTrace({ output }: { output: Record<string, unknown> }) {
   const durationMs =
     typeof output.durationMs === "number" ? output.durationMs : null;
   const steps = Array.isArray(output.steps)
-    ? (output.steps as SubagentStepData[])
+    ? (output.steps as SubagentStep[])
     : [];
 
   return (
@@ -683,7 +693,7 @@ function SubagentTrace({ output }: { output: Record<string, unknown> }) {
           {steps.map((s, idx) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: steps are an
             // append-only, never-reordered trace for this one tool call.
-            <SubagentStepRow key={idx} step={s} />
+            <SubagentStepEntry key={idx} entry={s} />
           ))}
         </div>
       ) : null}
@@ -722,7 +732,7 @@ function LabeledTraceCode({ label, value }: { label: string; value: unknown }) {
   );
 }
 
-function SubagentStepRow({ step }: { step: SubagentStepData }) {
+function SubagentStepRow({ step }: { step: SubagentToolStep }) {
   return (
     <Collapsible className="rounded border border-border/40">
       <CollapsibleTrigger

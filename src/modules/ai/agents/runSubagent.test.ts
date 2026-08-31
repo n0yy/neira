@@ -13,9 +13,10 @@ vi.mock("../tools/githubExplore", () => ({
   buildGithubExploreTools: () => ({}),
 }));
 vi.mock("../tools/fs", () => ({ buildFsTools: () => ({}) }));
-vi.mock("../tools/search", () => ({ buildSearchTools: () => ({}) }));
+vi.mock("../tools/search", () => ({ buildSearchTools: vi.fn(() => ({})) }));
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildSearchTools } from "../tools/search";
 import { runSubagent, type SubagentStep } from "./runSubagent";
 
 function makeContext(): ToolContext {
@@ -107,6 +108,7 @@ describe("runSubagent", () => {
 
     expect(r.steps).toEqual([
       {
+        kind: "tool",
         toolName: "grep",
         input: { pattern: "foo" },
         output: { hits: [] },
@@ -142,6 +144,7 @@ describe("runSubagent", () => {
     } as never);
 
     const [step] = r.steps;
+    if (step.kind !== "tool") throw new Error("expected a tool step");
     expect(JSON.stringify(step.input).length).toBeLessThan(5_000);
     expect(JSON.stringify(step.output).length).toBeLessThan(5_000);
   });
@@ -173,6 +176,7 @@ describe("runSubagent", () => {
     // the session file, and must not silently keep the untruncated original.
     expect(() => JSON.stringify(r.steps)).not.toThrow();
     const [step] = r.steps;
+    if (step.kind !== "tool") throw new Error("expected a tool step");
     expect(step.output).not.toBe(circular);
     expect(step.output).toEqual(
       expect.objectContaining({ truncated: true }),
@@ -212,6 +216,85 @@ describe("runSubagent", () => {
         output: { matches: [] },
       }),
     ]);
+  });
+
+  it("captures a step's reasoning text as its own trace entry, ahead of that step's tool calls", async () => {
+    mockGenerateText([
+      {
+        stepNumber: 0,
+        reasoningText: "I should search for the login flow first.",
+        toolCalls: [
+          { toolCallId: "c1", toolName: "grep", input: { pattern: "login" } },
+        ],
+        toolResults: [
+          { toolCallId: "c1", toolName: "grep", output: { hits: [] } },
+        ],
+      },
+    ]);
+
+    const r = await runSubagent({
+      type: "explore",
+      prompt: "find the login flow",
+      keys: { openai: "test-key" } as never,
+      modelId: "gpt-5.6",
+      toolContext: makeContext(),
+    } as never);
+
+    expect(r.steps).toEqual([
+      { kind: "reasoning", text: "I should search for the login flow first." },
+      expect.objectContaining({ kind: "tool", toolName: "grep" }),
+    ]);
+  });
+
+  it("measures a tool call's duration as its own pure execute() time, not the LLM turn around it", async () => {
+    const EXECUTE_DELAY_MS = 40;
+    vi.mocked(buildSearchTools).mockReturnValueOnce({
+      grep: {
+        // biome-ignore lint/suspicious/noExplicitAny: minimal AI SDK Tool double
+        execute: async (_input: any, _options: any) => {
+          await new Promise((r) => setTimeout(r, EXECUTE_DELAY_MS));
+          return { hits: [] };
+        },
+      },
+    } as never);
+
+    generateTextMock.mockImplementation(
+      // biome-ignore lint/suspicious/noExplicitAny: test double for AI SDK config
+      async (config: any) => {
+        // Simulate what the real AI SDK does: a slow model turn (unrelated to
+        // the tool itself) followed by actually invoking the wrapped tool.
+        await new Promise((r) => setTimeout(r, 100));
+        const output = await config.tools.grep.execute(
+          { pattern: "login" },
+          { toolCallId: "c1" },
+        );
+        const step = {
+          stepNumber: 0,
+          toolCalls: [
+            { toolCallId: "c1", toolName: "grep", input: { pattern: "login" } },
+          ],
+          toolResults: [{ toolCallId: "c1", toolName: "grep", output }],
+        };
+        config.onStepFinish?.(step);
+        return { text: "done", steps: [step] };
+      },
+    );
+
+    const r = await runSubagent({
+      type: "explore",
+      prompt: "find the login flow",
+      keys: { openai: "test-key" } as never,
+      modelId: "gpt-5.6",
+      toolContext: makeContext(),
+    } as never);
+
+    const [step] = r.steps;
+    if (step.kind !== "tool") throw new Error("expected a tool step");
+    // Comfortably above the tool's own delay, comfortably below the delay
+    // plus the simulated 100ms model turn — proves it's timing the
+    // execute() call itself, not the whole step.
+    expect(step.durationMs).toBeGreaterThanOrEqual(EXECUTE_DELAY_MS - 5);
+    expect(step.durationMs).toBeLessThan(90);
   });
 
   it("emits onStepTrace live, once per tool call, matching the final steps exactly", async () => {

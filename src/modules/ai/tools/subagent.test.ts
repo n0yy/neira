@@ -84,7 +84,7 @@ describe("run_subagent", () => {
       stepCount: 4,
       durationMs: 1200,
       steps: [
-        { toolName: "grep", input: { pattern: "x" }, output: { hits: [] }, durationMs: 50 },
+        { kind: "tool", toolName: "grep", input: { pattern: "x" }, output: { hits: [] }, durationMs: 50 },
       ],
     });
     const r = await run({
@@ -99,7 +99,7 @@ describe("run_subagent", () => {
       stepCount: 4,
       durationMs: 1200,
       steps: [
-        { toolName: "grep", input: { pattern: "x" }, output: { hits: [] }, durationMs: 50 },
+        { kind: "tool", toolName: "grep", input: { pattern: "x" }, output: { hits: [] }, durationMs: 50 },
       ],
     });
   });
@@ -134,6 +134,7 @@ describe("run_subagent", () => {
   it("mirrors each live step into the chat store keyed by this call's toolCallId", async () => {
     runSubagentMock.mockImplementation(async ({ onStepTrace }) => {
       onStepTrace?.({
+        kind: "tool",
         toolName: "grep",
         input: { pattern: "x" },
         output: { hits: [] },
@@ -145,6 +146,7 @@ describe("run_subagent", () => {
     await run({ type: "reviewer", prompt: "review it" });
 
     expect(appendLiveSubagentStepMock).toHaveBeenCalledWith("tool-call", {
+      kind: "tool",
       toolName: "grep",
       input: { pattern: "x" },
       output: { hits: [] },
@@ -182,7 +184,7 @@ describe("run_subagent", () => {
         stepCount: 2,
         durationMs: 100,
         steps: [
-          { toolName: "grep", input: { pattern: "x" }, output: { hits: [] }, durationMs: 10 },
+          { kind: "tool", toolName: "grep", input: { pattern: "x" }, output: { hits: [] }, durationMs: 10 },
         ],
       },
     });
