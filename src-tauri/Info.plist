@@ -4,7 +4,5 @@
 <dict>
 	<key>NSCameraUsageDescription</key>
 	<string>A program running within Neira would like to use the camera.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>A program running within Neira would like to use your microphone.</string>
 </dict>
 </plist>

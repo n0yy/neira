@@ -1,16 +1,15 @@
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { useChat, type UIMessage } from "@ai-sdk/react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon, Delete02Icon, Add01Icon, ArrowUpIcon, StopCircleIcon, Mic01Icon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon, Delete02Icon, Add01Icon, ArrowUpIcon, StopCircleIcon } from "@hugeicons/core-free-icons";
 import { lazy, Suspense, useMemo, useRef } from "react";
 import { useComposer, ACCEPTED_FILES } from "../lib/composer";
 import { getOrCreateChat } from "../store/chatRuntime";
 import { useChatStore } from "../store/chatStore";
 import { AiChatView } from "./AiChat";
 import { ChipsRow } from "./ChipsRow";
+import { ContextIndicator } from "./ContextIndicator";
 import { TodoStrip } from "./TodoStrip";
-import { Spinner } from "@/components/ui/spinner";
 import { AgentSwitcher } from "./AgentSwitcher";
 import { ModelDropdown } from "./AiStatusBarControls";
 
@@ -21,6 +20,8 @@ type Props = {
   hasComposer: boolean;
 };
 
+const EMPTY_MESSAGES: UIMessage[] = [];
+
 export function AiDockPanel({ onClose, hasComposer }: Props) {
   const sessionId = useChatStore((s) => s.activeSessionId);
 
@@ -28,10 +29,16 @@ export function AiDockPanel({ onClose, hasComposer }: Props) {
     <div className="flex h-full min-h-0 flex-col bg-card">
       <Header onClose={onClose} />
       <PlanModeStrip />
-      <div className="flex min-h-0 flex-1 flex-col">
-        {sessionId ? <ChatBody sessionId={sessionId} /> : <EmptySessionShell />}
-      </div>
-      <ComposerFooter hasComposer={hasComposer} />
+      {sessionId ? (
+        <ActiveSession sessionId={sessionId} hasComposer={hasComposer} />
+      ) : (
+        <>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <EmptySessionShell />
+          </div>
+          <ComposerFooter hasComposer={hasComposer} messages={EMPTY_MESSAGES} />
+        </>
+      )}
     </div>
   );
 }
@@ -40,9 +47,31 @@ function PlanModeStrip() {
   return null;
 }
 
-function ChatBody({ sessionId }: { sessionId: string }) {
+// One `useChat` subscription shared by the message list and the composer's
+// context indicator, rather than each subscribing independently. A second
+// subscription to the same Chat instance would re-run the indicator's
+// token-estimation pass on every chunk for no benefit.
+function ActiveSession({
+  sessionId,
+  hasComposer,
+}: {
+  sessionId: string;
+  hasComposer: boolean;
+}) {
   const chat = useMemo(() => getOrCreateChat(sessionId), [sessionId]);
   const helpers = useChat<UIMessage>({ chat });
+
+  return (
+    <>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <ChatBody helpers={helpers} />
+      </div>
+      <ComposerFooter hasComposer={hasComposer} messages={helpers.messages} />
+    </>
+  );
+}
+
+function ChatBody({ helpers }: { helpers: ReturnType<typeof useChat<UIMessage>> }) {
   const isBusy = helpers.status === "submitted" || helpers.status === "streaming";
 
   // Auto-focus handling is via composer focusSignal, not here.
@@ -130,7 +159,13 @@ function Header({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ComposerFooter({ hasComposer: _hasComposer }: { hasComposer: boolean }) {
+function ComposerFooter({
+  hasComposer: _hasComposer,
+  messages,
+}: {
+  hasComposer: boolean;
+  messages: UIMessage[];
+}) {
   void _hasComposer;
   const c = useComposer();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -173,24 +208,11 @@ function ComposerFooter({ hasComposer: _hasComposer }: { hasComposer: boolean })
           <Button type="button" variant="ghost" size="icon" className="size-6" title="Attach file" onClick={() => fileInputRef.current?.click()} disabled={c.isBusy}>
             <HugeiconsIcon icon={Add01Icon} size={13} strokeWidth={1.75} />
           </Button>
-          {c.voice.supported ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={cn("size-6", c.voice.recording && "bg-destructive/10 text-destructive")}
-              title={c.voice.recording ? "Stop & transcribe" : c.voice.transcribing ? "Transcribing…" : "Voice input"}
-              onClick={() => (c.voice.recording ? c.voice.stop() : void c.voice.start())}
-              disabled={c.isBusy || c.voice.transcribing || !c.voice.hasKey}
-            >
-              {c.voice.recording ? (
-                <span className="size-2 animate-pulse rounded-full bg-destructive" />
-              ) : c.voice.transcribing ? (
-                <Spinner className="size-3" />
-              ) : (
-                <HugeiconsIcon icon={Mic01Icon} size={13} strokeWidth={1.75} />
-              )}
-            </Button>
+          {sessionId ? (
+            <ContextIndicator
+              messages={messages}
+              triggerClassName="h-6 gap-1 px-0 text-[10.5px]"
+            />
           ) : null}
           <span className="flex-1" />
           {c.isBusy ? (
