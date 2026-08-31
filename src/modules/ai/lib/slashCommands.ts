@@ -30,22 +30,33 @@ const IMPLEMENT_WORKFLOW = `Then:
 4. Do not run a code-review pass — that's a separate step, run /code-review for it when wanted.
 5. Commit the work to the current branch. If you worked off a ticket file under .scratch/, check off its completed acceptance criteria in that file before committing.`;
 
-function buildImplementPrompt(tail: string): string {
-  const [slug, num] = tail.split(/\s+/).filter(Boolean);
+const ONE_TICKET_GUARD = `Implement ONLY that one spec or ticket. Never sweep or implement any other file under .scratch/, even ones sitting right next to it in the same issues/ folder.`;
 
-  if (!slug) {
+function buildImplementPrompt(tail: string): string {
+  if (!tail) {
     return `Implement the work already described in this conversation (a spec, a ticket, or explicit instructions from the user). If nothing here tells you what to build, stop and ask — don't guess at what "it" is.
 
 ${IMPLEMENT_WORKFLOW}`;
   }
 
-  if (!num) {
-    return `Read .scratch/${slug}/. If spec.md exists there, implement the whole spec. If an issues/ directory exists instead, work the frontier: the lowest-numbered ticket file whose "Blocked by" list is fully satisfied (every blocker done or absent). Implement that one ticket.
+  // A path (has a slash or a .md extension) always wins over slug/NN parsing,
+  // so a relative path like "permission-modes/issues/03-foo.md" is read
+  // directly instead of being misread as a one-token feature-slug.
+  if (tail.includes("/") || tail.endsWith(".md")) {
+    return `Read the file at "${tail}" with read_file — try it exactly as given first, and if that fails, retry with a leading ".scratch/" prepended. ${ONE_TICKET_GUARD}
 
 ${IMPLEMENT_WORKFLOW}`;
   }
 
-  return `Read .scratch/${slug}/issues/ and find the ticket file whose numeric prefix matches ${num} (it may be zero-padded, e.g. "0${num}-..." if under 10). Implement that ticket specifically, regardless of frontier order.
+  const [slug, num] = tail.split(/\s+/).filter(Boolean);
+
+  if (!num) {
+    return `Read .scratch/${slug}/. If spec.md exists there, implement the whole spec. If an issues/ directory exists instead, work the frontier: the lowest-numbered ticket file whose "Blocked by" list is fully satisfied (every blocker done or absent). ${ONE_TICKET_GUARD}
+
+${IMPLEMENT_WORKFLOW}`;
+  }
+
+  return `Read .scratch/${slug}/issues/ and find the ticket file whose numeric prefix matches ${num} (it may be zero-padded, e.g. "0${num}-..." if under 10). ${ONE_TICKET_GUARD}
 
 ${IMPLEMENT_WORKFLOW}`;
 }

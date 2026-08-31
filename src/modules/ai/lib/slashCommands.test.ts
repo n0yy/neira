@@ -43,6 +43,36 @@ describe("tryRunSlashCommand: /implement", () => {
     expect(outcome.prompt).not.toContain("work the frontier");
   });
 
+  it("with a relative path (contains a slash), reads it directly instead of treating it as a slug", () => {
+    const outcome = tryRunSlashCommand(
+      "/implement permission-modes/issues/03-foo.md",
+    );
+    if (outcome.kind !== "send-prompt") throw new Error("unreachable");
+    expect(outcome.prompt).toContain(
+      'Read the file at "permission-modes/issues/03-foo.md"',
+    );
+    expect(outcome.prompt).not.toContain(".scratch/permission-modes/issues/03-foo.md/");
+  });
+
+  it("with a bare filename ending in .md, reads it directly", () => {
+    const outcome = tryRunSlashCommand("/implement 03-foo.md");
+    if (outcome.kind !== "send-prompt") throw new Error("unreachable");
+    expect(outcome.prompt).toContain('Read the file at "03-foo.md"');
+  });
+
+  it("every argument form tells the model not to sweep other tickets", () => {
+    const guard = "Never sweep or implement any other file under .scratch/";
+    for (const input of [
+      "/implement permission-modes",
+      "/implement permission-modes 2",
+      "/implement permission-modes/issues/03-foo.md",
+    ]) {
+      const outcome = tryRunSlashCommand(input);
+      if (outcome.kind !== "send-prompt") throw new Error("unreachable");
+      expect(outcome.prompt).toContain(guard);
+    }
+  });
+
   it("always includes the shared workflow (branch check, no review, commit)", () => {
     const outcome = tryRunSlashCommand("/implement");
     if (outcome.kind !== "send-prompt") throw new Error("unreachable");
