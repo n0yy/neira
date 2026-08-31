@@ -206,6 +206,7 @@ export function AiComposerProvider({ children }: ProviderProps) {
 
   const submit = () => {
     if (isBusy) return;
+    if (!sessionId) return;
     const trimmed = value.trim();
     if (
       !trimmed &&
@@ -215,8 +216,9 @@ export function AiComposerProvider({ children }: ProviderProps) {
     )
       return;
 
-    // Slash-command interception. `/plan` toggles plan mode; `/init` rewrites
-    // the prompt to the NEIRA.md scan template before sending.
+    // Slash-command interception: rewrites the prompt to a template (or runs
+    // a side effect, like switching the active Agent) before sending. See
+    // tryRunSlashCommand / SLASH_COMMANDS in slashCommands.ts.
     let effectiveText = trimmed;
     let commandMarker: string | null = null;
     let commandSource = trimmed;
@@ -292,7 +294,6 @@ export function AiComposerProvider({ children }: ProviderProps) {
       }
     }
 
-    if (!sessionId) return;
     const store = useChatStore.getState();
     store.patchAgentMeta({ hitStepCap: false, compactionNotice: null });
     store.openPanel();
