@@ -9,6 +9,7 @@ import {
   type ModelId,
   type ProviderId,
 } from "../config";
+import { usePermissionModeStore } from "./permissionModeStore";
 import { useTodosStore } from "./todoStore";
 import type { AgentUsage } from "../lib/agent";
 import { EMPTY_PROVIDER_KEYS, type ProviderKeys, type CustomEndpointKeys } from "../lib/keyring";
@@ -354,6 +355,7 @@ export const useChatStore = create<StoreState>((set, get) => ({
     set({ sessions: next, activeSessionId: id, agentMeta: IDLE_META, liveSubagentTraces: {} });
     void saveSessionsList(next);
     void saveActiveId(id);
+    usePermissionModeStore.getState().resetForNewSession();
     return id;
   },
 
@@ -400,6 +402,7 @@ export const useChatStore = create<StoreState>((set, get) => ({
       set({ sessions: [fresh], activeSessionId: fresh.id });
       void saveSessionsList([fresh]);
       void saveActiveId(fresh.id);
+      usePermissionModeStore.getState().resetForNewSession();
       return;
     }
 

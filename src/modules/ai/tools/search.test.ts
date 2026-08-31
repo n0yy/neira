@@ -31,6 +31,7 @@ function makeContext(): ToolContext {
     readAgentOutput: () => null,
     readCache: new Map(),
     getSessionId: () => "session",
+    getPermissionMode: () => "manual",
   };
 }
 

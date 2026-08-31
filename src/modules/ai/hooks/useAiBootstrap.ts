@@ -9,6 +9,7 @@ import {
 } from "../lib/keyring";
 import { useAgentsStore } from "../store/agentsStore";
 import { useChatStore } from "../store/chatStore";
+import { usePermissionModeStore } from "../store/permissionModeStore";
 import { useSnippetsStore } from "../store/snippetsStore";
 
 /**
@@ -98,6 +99,7 @@ export function useAiBootstrap(): {
     void hydrateSessions();
     void useAgentsStore.getState().hydrate();
     void useSnippetsStore.getState().hydrate();
+    void usePermissionModeStore.getState().hydrate();
   }, [hydrateSessions]);
 
   return { hasComposer, keysLoaded };

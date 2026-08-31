@@ -1,4 +1,8 @@
+import type { PermissionMode } from "../lib/permissionMode";
+
 export type ToolContext = {
+  /** Active Permission Mode, read live so a mid-conversation switch takes effect on the next call. */
+  getPermissionMode: () => PermissionMode;
   /** Active terminal tab cwd, used to resolve relative paths. Null = home. */
   getCwd: () => string | null;
   /** Workspace root (explorer root). Used by tools that operate over the project. */

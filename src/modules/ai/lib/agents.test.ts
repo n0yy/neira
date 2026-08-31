@@ -33,8 +33,7 @@ describe("BUILTIN_AGENTS", () => {
     const brainstorm = BUILTIN_AGENTS.find((a) => a.id === "builtin:brainstorm");
     expect(brainstorm).toBeDefined();
     expect(brainstorm?.instructions).toContain("never write or edit code");
-    expect(brainstorm?.instructions).toContain("edit");
-    expect(brainstorm?.instructions).toContain("write_file");
+    expect(brainstorm?.instructions).toContain("refuse");
     expect(brainstorm?.instructions).toContain("NEIRA.md");
     expect(brainstorm?.instructions).toContain(".scratch/");
     expect(brainstorm?.instructions).toContain("never publish it to any tracker");

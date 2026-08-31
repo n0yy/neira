@@ -1,5 +1,6 @@
 import type { ToolExecutionOptions } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { PermissionMode } from "../lib/permissionMode";
 import type { ToolContext } from "./context";
 
 const nativeMock = vi.hoisted(() => ({
@@ -17,11 +18,6 @@ vi.mock("../lib/security", () => ({
   })),
 }));
 
-vi.mock("../store/planStore", () => ({
-  newQueuedEditId: () => "queued-edit",
-  usePlanStore: { getState: () => ({ active: false, enqueue: vi.fn() }) },
-}));
-
 import { buildEditTools } from "./edit";
 
 const toolOptions: ToolExecutionOptions = {
@@ -31,7 +27,10 @@ const toolOptions: ToolExecutionOptions = {
 
 const FILE = "/workspace/a.txt";
 
-function makeContext(readCache: Map<string, { size: number; hash: number }>) {
+function makeContext(
+  readCache: Map<string, { size: number; hash: number }>,
+  mode: PermissionMode = "manual",
+) {
   return {
     getCwd: () => "/workspace",
     getWorkspaceRoot: () => "/workspace",
@@ -43,6 +42,7 @@ function makeContext(readCache: Map<string, { size: number; hash: number }>) {
     readAgentOutput: () => null,
     readCache,
     getSessionId: () => "session",
+    getPermissionMode: () => mode,
   } as unknown as ToolContext;
 }
 
@@ -83,6 +83,31 @@ beforeEach(() => {
   vi.clearAllMocks();
   nativeMock.canonicalize.mockImplementation(async (p: string) => p);
   nativeMock.writeFile.mockResolvedValue(undefined);
+});
+
+type NeedsApproval =
+  | boolean
+  | ((input: never, opts: ToolExecutionOptions) => boolean | PromiseLike<boolean>)
+  | undefined;
+
+async function resolveApproval(na: NeedsApproval): Promise<boolean> {
+  return typeof na === "function" ? na({} as never, toolOptions) : Boolean(na);
+}
+
+describe("edit/multi_edit needsApproval", () => {
+  it("asks under manual and plan", async () => {
+    const { edit, multi_edit } = buildEditTools(makeContext(new Map(), "manual"));
+    expect(await resolveApproval(edit.needsApproval)).toBe(true);
+    expect(await resolveApproval(multi_edit.needsApproval)).toBe(true);
+  });
+
+  it("does not ask under accept-edits or auto", async () => {
+    for (const mode of ["accept-edits", "auto"] as const) {
+      const { edit, multi_edit } = buildEditTools(makeContext(new Map(), mode));
+      expect(await resolveApproval(edit.needsApproval)).toBe(false);
+      expect(await resolveApproval(multi_edit.needsApproval)).toBe(false);
+    }
+  });
 });
 
 describe("edit tool guards", () => {

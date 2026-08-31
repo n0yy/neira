@@ -1,8 +1,8 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { native } from "../lib/native";
+import { autoApprovesEdits } from "../lib/permissionMode";
 import { checkWritableCanonical } from "../lib/security";
-import { newQueuedEditId, usePlanStore } from "../store/planStore";
 import { resolvePath, type ToolContext } from "./context";
 
 type EditResult =
@@ -18,7 +18,6 @@ function djb2(s: string): number {
 async function applyEdits(
   abs: string,
   edits: { old_string: string; new_string: string; replace_all?: boolean }[],
-  kind: "edit" | "multi_edit",
   readCache: Map<string, { size: number; hash: number }>,
 ): Promise<EditResult> {
   const r = await native.readFile(abs);
@@ -86,23 +85,6 @@ async function applyEdits(
     }
   }
 
-  if (usePlanStore.getState().active) {
-    usePlanStore.getState().enqueue({
-      id: newQueuedEditId(),
-      kind,
-      path: abs,
-      originalContent: original,
-      proposedContent: content,
-      isNewFile: false,
-    });
-    return {
-      ok: true,
-      replacements: totalReplacements,
-      bytesWritten: content.length,
-      path: abs,
-    };
-  }
-
   try {
     await native.writeFile(abs, content);
     readCache.set(abs, { size: content.length, hash: djb2(content) });
@@ -130,7 +112,7 @@ export function buildEditTools(ctx: ToolContext) {
         new_string: z.string().describe("Replacement substring."),
         replace_all: z.boolean().optional(),
       }),
-      needsApproval: true,
+      needsApproval: () => !autoApprovesEdits(ctx.getPermissionMode()),
       execute: async ({ path, old_string, new_string, replace_all }) => {
         const reqPath = resolvePath(path, ctx.getCwd());
         const safety = await checkWritableCanonical(reqPath, native.canonicalize);
@@ -146,7 +128,6 @@ export function buildEditTools(ctx: ToolContext) {
         return applyEdits(
           abs,
           [{ old_string, new_string, replace_all }],
-          "edit",
           ctx.readCache,
         );
       },
@@ -167,7 +148,7 @@ export function buildEditTools(ctx: ToolContext) {
           )
           .min(1),
       }),
-      needsApproval: true,
+      needsApproval: () => !autoApprovesEdits(ctx.getPermissionMode()),
       execute: async ({ path, edits }) => {
         const reqPath = resolvePath(path, ctx.getCwd());
         const safety = await checkWritableCanonical(reqPath, native.canonicalize);
@@ -180,7 +161,7 @@ export function buildEditTools(ctx: ToolContext) {
             path: abs,
           };
         }
-        return applyEdits(abs, edits, "multi_edit", ctx.readCache);
+        return applyEdits(abs, edits, ctx.readCache);
       },
     }),
   } as const;

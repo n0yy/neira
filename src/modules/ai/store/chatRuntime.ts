@@ -7,7 +7,7 @@ import { getModel, providerNeedsKey, type ModelId } from "../config";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { BUILTIN_AGENTS } from "../lib/agents";
 import { useAgentsStore } from "./agentsStore";
-import { usePlanStore } from "./planStore";
+import { usePermissionModeStore } from "./permissionModeStore";
 import { createContextAwareTransport } from "../lib/transport";
 import type { ToolContext } from "../tools/tools";
 import {
@@ -35,6 +35,7 @@ function makeChat(sessionId: string): Chat<UIMessage> {
       useChatStore.getState().live.readLeafBuffer(leafId),
     readCache,
     getSessionId: () => sessionId,
+    getPermissionMode: () => usePermissionModeStore.getState().mode,
   };
 
   const transport = createContextAwareTransport({
@@ -58,7 +59,6 @@ function makeChat(sessionId: string): Chat<UIMessage> {
         activeFile: live.getActiveFile(),
       };
     },
-    getPlanMode: () => usePlanStore.getState().active,
     getLmstudioBaseURL: () => usePreferencesStore.getState().lmstudioBaseURL,
     getLmstudioModelId: () => usePreferencesStore.getState().lmstudioModelId,
     getMlxBaseURL: () => usePreferencesStore.getState().mlxBaseURL,

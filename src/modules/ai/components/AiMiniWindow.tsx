@@ -28,10 +28,9 @@ import { useAgentsStore } from "../store/agentsStore";
 import { useChatStore } from "../store/chatStore";
 import { getOrCreateChat } from "../store/chatRuntime";
 import { ContextIndicator } from "./ContextIndicator";
-import { usePlanStore } from "../store/planStore";
 import { AgentSwitcher } from "./AgentSwitcher";
 import { AiChatView } from "./AiChat";
-import { PlanDiffReview } from "./PlanDiffReview";
+import { PermissionModeSwitcher } from "./PermissionModeSwitcher";
 import { TodoStrip } from "./TodoStrip";
 
 const SUGGESTIONS = [
@@ -115,7 +114,6 @@ export function AiMiniWindow({ state }: { state: PresenceState }) {
           onHeaderPointerDown={onHeaderPointerDown}
         />
       )}
-      <PlanDiffReview />
     </div>
   );
 }
@@ -179,8 +177,6 @@ function Body({
         onHeaderPointerDown={onHeaderPointerDown}
       />
 
-      <PlanModeStrip />
-
       <div className="flex min-h-0 flex-1 flex-col">
         {helpers.messages.length === 0 ? (
           <EmptyState onPick={focusInput} />
@@ -200,30 +196,6 @@ function Body({
 
       <TodoStrip sessionId={sessionId} />
     </>
-  );
-}
-
-function PlanModeStrip() {
-  const active = usePlanStore((s) => s.active);
-  const queueLen = usePlanStore((s) => s.queue.length);
-  const disable = usePlanStore((s) => s.disable);
-  if (!active) return null;
-  return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-border/40 bg-muted/40 px-3 py-1.5">
-      <span className="size-1.5 shrink-0 rounded-full bg-amber-500" />
-      <span className="text-[11px] font-medium text-foreground">Plan mode</span>
-      <span className="text-[11px] text-muted-foreground">
-        {queueLen > 0 ? `· ${queueLen} queued` : "· no edits queued"}
-      </span>
-      <span className="flex-1" />
-      <button
-        type="button"
-        onClick={() => disable()}
-        className="rounded px-1.5 py-0.5 text-[10.5px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-      >
-        Exit
-      </button>
-    </div>
   );
 }
 
@@ -279,6 +251,7 @@ function Header({
         {messages !== undefined ? (
           <ContextIndicator messages={messages} />
         ) : null}
+        <PermissionModeSwitcher isMiniWindow />
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {isBusy ? (

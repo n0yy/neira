@@ -8,16 +8,12 @@ export type PreparedAgentPrompt = {
 
 export function prepareAgentPrompt(
   stableSystem: string,
-  planInstructions: string | null,
   history: readonly ModelMessage[],
   provider: ProviderId,
 ): PreparedAgentPrompt {
   const system: SystemModelMessage[] = [
     { role: "system", content: stableSystem },
   ];
-  if (planInstructions) {
-    system.push({ role: "system", content: planInstructions });
-  }
   const messages = history.slice();
   if (provider !== "anthropic") return { system, messages };
 

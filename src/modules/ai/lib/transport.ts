@@ -63,7 +63,6 @@ type Deps = {
   onUsage?: (delta: AgentUsageDelta) => void;
   onCompact?: (info: { droppedCount: number }) => void;
   onFinishMeta?: (info: { hitStepCap: boolean; finishReason: string }) => void;
-  getPlanMode?: () => boolean;
 };
 
 type SendOptions = {
@@ -102,7 +101,6 @@ export function createContextAwareTransport(deps: Deps) {
       openrouterModelId: deps.getOpenrouterModelId?.(),
       customEndpoints: deps.getCustomEndpoints?.(),
       customEndpointKeys: deps.getCustomEndpointKeys?.(),
-      planMode: deps.getPlanMode?.(),
       projectMemory,
       uiMessages: messagesForRun,
       abortSignal: options.abortSignal,

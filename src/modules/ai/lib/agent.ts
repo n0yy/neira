@@ -298,9 +298,6 @@ export function buildConfiguredLanguageModel(
   });
 }
 
-const PLAN_MODE_PROMPT = `## PLAN MODE — ACTIVE
-Mutating tools (write_file, edit, multi_edit, create_directory) will queue their changes for the user to review as a single diff. Do NOT execute bash_run or bash_background while plan mode is active — restrict yourself to reads (read_file, grep, glob, list_directory) and the queued mutations. After queueing the full set of edits, stop and return a brief summary; do not continue acting until the user has accepted/rejected.`;
-
 function buildStableSystem(
   modelId: string,
   persona: { name: string; instructions: string } | null,
@@ -360,7 +357,6 @@ export type RunAgentOptions = {
   openrouterModelId?: string;
   customEndpoints?: readonly CustomEndpoint[];
   customEndpointKeys?: CustomEndpointKeys;
-  planMode?: boolean;
   projectMemory?: string | null;
   uiMessages: UIMessage[];
   abortSignal?: AbortSignal;
@@ -412,12 +408,7 @@ export async function runAgentStream(opts: RunAgentOptions) {
     opts.onCompact?.({ droppedCount: compact.droppedCount });
   }
 
-  const prompt = prepareAgentPrompt(
-    stableSystem,
-    opts.planMode ? PLAN_MODE_PROMPT : null,
-    compactedHistory,
-    provider,
-  );
+  const prompt = prepareAgentPrompt(stableSystem, compactedHistory, provider);
 
   let stepsSeen = 0;
   return streamText({

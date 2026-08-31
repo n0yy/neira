@@ -11,6 +11,7 @@ import { ChipsRow } from "./ChipsRow";
 import { ContextIndicator } from "./ContextIndicator";
 import { TodoStrip } from "./TodoStrip";
 import { AgentSwitcher } from "./AgentSwitcher";
+import { PermissionModeSwitcher } from "./PermissionModeSwitcher";
 import { ModelDropdown } from "./AiStatusBarControls";
 
 const AiComposerInputLazy = lazy(() => import("./AiComposerInput").then((m) => ({ default: m.AiComposerInput })));
@@ -28,7 +29,6 @@ export function AiDockPanel({ onClose, hasComposer }: Props) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
       <Header onClose={onClose} />
-      <PlanModeStrip />
       {sessionId ? (
         <ActiveSession sessionId={sessionId} hasComposer={hasComposer} />
       ) : (
@@ -41,10 +41,6 @@ export function AiDockPanel({ onClose, hasComposer }: Props) {
       )}
     </div>
   );
-}
-
-function PlanModeStrip() {
-  return null;
 }
 
 // One `useChat` subscription shared by the message list and the composer's
@@ -214,6 +210,7 @@ function ComposerFooter({
               triggerClassName="h-6 gap-1 px-0 text-[10.5px]"
             />
           ) : null}
+          <PermissionModeSwitcher />
           <span className="flex-1" />
           {c.isBusy ? (
             <Button type="button" size="icon" variant="ghost" className="size-6" aria-label="Stop" onClick={c.stop}>
