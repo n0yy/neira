@@ -154,7 +154,6 @@ export default function App() {
     setActiveSpaceForNewTabs,
     newTab,
     newBlockTab,
-    newAgentTab,
     newAgentGroupTab,
     newPrivateTab,
     openFileTab,
@@ -1373,7 +1372,6 @@ export default function App() {
     launchCwd,
     home,
     openPreviewTab,
-    newAgentTab,
     terminalRefs,
   });
 

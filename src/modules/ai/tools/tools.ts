@@ -1,4 +1,3 @@
-import { buildManagedAgentTools } from "./agent";
 import { buildEditTools } from "./edit";
 import { buildFsTools } from "./fs";
 import { buildSearchTools } from "./search";
@@ -17,8 +16,8 @@ export { resolvePath, type ToolContext } from "./context";
  *    auto-execute, but go through the security guard which refuses obvious
  *    secret paths (.env*, .ssh/, credentials, etc.).
  *  - Mutating tools (`write_file`, `edit`, `multi_edit`, `create_directory`,
- *    `bash_run`, `bash_background`, `spawn_coding_agent`, `send_to_agent`)
- *    require explicit user approval — the AI SDK pauses on tool-call and
+ *    `bash_run`, `bash_background`) require explicit user approval — the
+ *    AI SDK pauses on tool-call and
  *    surfaces a `tool-approval-request` part that the UI renders as a
  *    confirmation card. Which modes skip that card is decided per-tool by
  *    each tool's `needsApproval` (see `lib/permissionMode.ts`).
@@ -46,7 +45,6 @@ export function buildTools(ctx: import("./context").ToolContext) {
     ...buildSubagentTools(ctx),
     ...buildTerminalTools(ctx),
     ...buildTodoTools(ctx),
-    ...buildManagedAgentTools(ctx),
   };
 
   if (ctx.getPermissionMode() === "plan") {

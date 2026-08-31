@@ -59,8 +59,6 @@ function makeContext(): ToolContext {
     isActiveTerminalPrivate: () => false,
     injectIntoActivePty: () => false,
     openPreview: () => false,
-    spawnAgent: () => null,
-    readAgentOutput: () => null,
     readCache: new Map(),
     getSessionId: () => "session",
   } as unknown as ToolContext;

@@ -2,6 +2,7 @@ import type { ToolExecutionOptions } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PermissionMode } from "../lib/permissionMode";
 import type { ToolContext } from "./context";
+import { resolveApproval } from "./testNeedsApproval";
 
 const nativeMock = vi.hoisted(() => ({
   canonicalize: vi.fn(async (path: string) => path),
@@ -38,8 +39,6 @@ function makeContext(
     isActiveTerminalPrivate: () => false,
     injectIntoActivePty: () => false,
     openPreview: () => false,
-    spawnAgent: () => null,
-    readAgentOutput: () => null,
     readCache,
     getSessionId: () => "session",
     getPermissionMode: () => mode,
@@ -84,15 +83,6 @@ beforeEach(() => {
   nativeMock.canonicalize.mockImplementation(async (p: string) => p);
   nativeMock.writeFile.mockResolvedValue(undefined);
 });
-
-type NeedsApproval =
-  | boolean
-  | ((input: never, opts: ToolExecutionOptions) => boolean | PromiseLike<boolean>)
-  | undefined;
-
-async function resolveApproval(na: NeedsApproval): Promise<boolean> {
-  return typeof na === "function" ? na({} as never, toolOptions) : Boolean(na);
-}
 
 describe("edit/multi_edit needsApproval", () => {
   it("asks under manual and plan", async () => {

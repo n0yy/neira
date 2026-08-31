@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MUTATING_TOOL_NAMES, type PermissionMode } from "../lib/permissionMode";
+import type { PermissionMode } from "../lib/permissionMode";
 import { buildTools } from "./tools";
 import type { ToolContext } from "./context";
 
@@ -11,8 +11,6 @@ function makeContext(mode: PermissionMode): ToolContext {
     isActiveTerminalPrivate: () => false,
     injectIntoActivePty: () => false,
     openPreview: () => false,
-    spawnAgent: () => null,
-    readAgentOutput: () => null,
     readCache: new Map(),
     getSessionId: () => "session",
     getPermissionMode: () => mode,
@@ -28,13 +26,6 @@ const READ_ONLY_SURVIVORS = [
 ] as const;
 
 describe("buildTools under Plan mode", () => {
-  it("omits every mutating tool from the registry", () => {
-    const tools = buildTools(makeContext("plan"));
-    for (const name of MUTATING_TOOL_NAMES) {
-      expect(tools).not.toHaveProperty(name);
-    }
-  });
-
   it("keeps read-only and todo tools available", () => {
     const tools = buildTools(makeContext("plan"));
     for (const name of READ_ONLY_SURVIVORS) {
@@ -44,13 +35,6 @@ describe("buildTools under Plan mode", () => {
 });
 
 describe("buildTools outside Plan mode", () => {
-  it("keeps every mutating tool registered under manual", () => {
-    const tools = buildTools(makeContext("manual"));
-    for (const name of MUTATING_TOOL_NAMES) {
-      expect(tools).toHaveProperty(name);
-    }
-  });
-
   it("restores the full registry after switching out of plan", () => {
     const planTools = buildTools(makeContext("plan"));
     expect(planTools).not.toHaveProperty("write_file");

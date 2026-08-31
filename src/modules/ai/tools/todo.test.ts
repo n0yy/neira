@@ -23,8 +23,6 @@ function makeContext(sessionId: string | null = "session"): ToolContext {
     isActiveTerminalPrivate: () => false,
     injectIntoActivePty: () => false,
     openPreview: () => false,
-    spawnAgent: () => null,
-    readAgentOutput: () => null,
     readCache: new Map(),
     getSessionId: () => sessionId,
   } as unknown as ToolContext;

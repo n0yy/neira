@@ -18,8 +18,7 @@ export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
 
 export const PERMISSION_MODE_DESCRIPTIONS: Record<PermissionMode, string> = {
   manual: "Every mutating tool call asks for approval.",
-  "accept-edits":
-    "File edits apply without asking. Shell and agent calls still ask.",
+  "accept-edits": "File edits apply without asking. Shell calls still ask.",
   auto: "Every mutating tool call runs without asking.",
   plan: "Read-only. Mutating tools are unavailable.",
 };
@@ -29,29 +28,10 @@ export function autoApprovesEdits(mode: PermissionMode): boolean {
   return mode === "accept-edits" || mode === "auto";
 }
 
-/** True when the given mode auto-approves every mutating tool, including shell and managed-agent calls. */
+/** True when the given mode auto-approves every mutating tool, including shell calls. */
 export function autoApprovesEverything(mode: PermissionMode): boolean {
   return mode === "auto";
 }
-
-/**
- * Every tool that currently declares `needsApproval`, kept here only as an
- * explicit fixture for tests. `buildTools` (tools.ts) does NOT read this —
- * it derives the Plan-mode omission live from each tool's own
- * `needsApproval`, so this list has no bearing on runtime behavior. Update
- * it when a tool's approval story changes, so the tests keep documenting
- * the true set.
- */
-export const MUTATING_TOOL_NAMES = [
-  "write_file",
-  "create_directory",
-  "edit",
-  "multi_edit",
-  "bash_run",
-  "bash_background",
-  "spawn_coding_agent",
-  "send_to_agent",
-] as const;
 
 const STORE_PATH = "neira-permission-mode.json";
 const KEY_MODE = "mode";

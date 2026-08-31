@@ -31,8 +31,6 @@ function makeContext(over: Ctx = {}): ToolContext {
     isActiveTerminalPrivate: over.isActiveTerminalPrivate ?? (() => false),
     injectIntoActivePty: () => false,
     openPreview: over.openPreview ?? (() => true),
-    spawnAgent: () => null,
-    readAgentOutput: () => null,
     readCache: new Map(),
     getSessionId: () => "session",
   } as unknown as ToolContext;
