@@ -78,6 +78,10 @@ Auto-executes (no approval) — subagents are read-only by design.`,
             openrouterModelId: prefs.openrouterModelId,
             customEndpoints: prefs.customEndpoints,
             customEndpointKeys,
+            lmstudioReasoning: prefs.lmstudioReasoning,
+            mlxReasoning: prefs.mlxReasoning,
+            ollamaReasoning: prefs.ollamaReasoning,
+            openrouterReasoning: prefs.openrouterReasoning,
           });
           return {
             type,

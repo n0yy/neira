@@ -11,6 +11,7 @@ import {
   OLLAMA_DEFAULT_BASE_URL,
   OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
 } from "@/modules/ai/config";
+import type { ReasoningConfig } from "@/modules/ai/lib/reasoningEffort";
 import {
   type AgentLaunchCommands,
   DEFAULT_AGENT_LAUNCH_COMMANDS,
@@ -146,6 +147,10 @@ export type Preferences = {
   openaiCompatibleContextLimit: number;
   customEndpoints: CustomEndpoint[];
   openrouterModelId: string;
+  lmstudioReasoning: ReasoningConfig | null;
+  mlxReasoning: ReasoningConfig | null;
+  ollamaReasoning: ReasoningConfig | null;
+  openrouterReasoning: ReasoningConfig | null;
   favoriteModelIds: string[];
   recentModelIds: string[];
   vimMode: boolean;
@@ -246,6 +251,10 @@ const KEY_OPENAI_COMPAT_MODEL_ID = "openaiCompatibleModelId";
 const KEY_OPENAI_COMPAT_CONTEXT_LIMIT = "openaiCompatibleContextLimit";
 const KEY_CUSTOM_ENDPOINTS = "customEndpoints";
 const KEY_OPENROUTER_MODEL_ID = "openrouterModelId";
+const KEY_LMSTUDIO_REASONING = "lmstudioReasoning";
+const KEY_MLX_REASONING = "mlxReasoning";
+const KEY_OLLAMA_REASONING = "ollamaReasoning";
+const KEY_OPENROUTER_REASONING = "openrouterReasoning";
 const KEY_FAVORITE_MODELS = "favoriteModelIds";
 const KEY_RECENT_MODELS = "recentModelIds";
 const KEY_VIM_MODE = "vimMode";
@@ -342,6 +351,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   openaiCompatibleContextLimit: 128_000,
   customEndpoints: [],
   openrouterModelId: "",
+  lmstudioReasoning: null,
+  mlxReasoning: null,
+  ollamaReasoning: null,
+  openrouterReasoning: null,
   favoriteModelIds: [],
   recentModelIds: [],
   vimMode: false,
@@ -485,6 +498,18 @@ export async function loadPreferences(): Promise<Preferences> {
     openrouterModelId:
       get<string>(KEY_OPENROUTER_MODEL_ID) ??
       DEFAULT_PREFERENCES.openrouterModelId,
+    lmstudioReasoning:
+      get<ReasoningConfig | null>(KEY_LMSTUDIO_REASONING) ??
+      DEFAULT_PREFERENCES.lmstudioReasoning,
+    mlxReasoning:
+      get<ReasoningConfig | null>(KEY_MLX_REASONING) ??
+      DEFAULT_PREFERENCES.mlxReasoning,
+    ollamaReasoning:
+      get<ReasoningConfig | null>(KEY_OLLAMA_REASONING) ??
+      DEFAULT_PREFERENCES.ollamaReasoning,
+    openrouterReasoning:
+      get<ReasoningConfig | null>(KEY_OPENROUTER_REASONING) ??
+      DEFAULT_PREFERENCES.openrouterReasoning,
     favoriteModelIds: (
       get<string[]>(KEY_FAVORITE_MODELS) ?? DEFAULT_PREFERENCES.favoriteModelIds
     ).filter(isKnownModelId),
@@ -801,6 +826,30 @@ export async function setOpenrouterModelId(value: string): Promise<void> {
   await writePref(KEY_OPENROUTER_MODEL_ID, value);
 }
 
+export async function setLmstudioReasoning(
+  value: ReasoningConfig | null,
+): Promise<void> {
+  await writePref(KEY_LMSTUDIO_REASONING, value);
+}
+
+export async function setMlxReasoning(
+  value: ReasoningConfig | null,
+): Promise<void> {
+  await writePref(KEY_MLX_REASONING, value);
+}
+
+export async function setOllamaReasoning(
+  value: ReasoningConfig | null,
+): Promise<void> {
+  await writePref(KEY_OLLAMA_REASONING, value);
+}
+
+export async function setOpenrouterReasoning(
+  value: ReasoningConfig | null,
+): Promise<void> {
+  await writePref(KEY_OPENROUTER_REASONING, value);
+}
+
 export async function setFavoriteModelIds(value: string[]): Promise<void> {
   await writePref(KEY_FAVORITE_MODELS, value);
 }
@@ -1027,6 +1076,10 @@ export async function onPreferencesChange(
     [KEY_OPENAI_COMPAT_CONTEXT_LIMIT]: "openaiCompatibleContextLimit",
     [KEY_CUSTOM_ENDPOINTS]: "customEndpoints",
     [KEY_OPENROUTER_MODEL_ID]: "openrouterModelId",
+    [KEY_LMSTUDIO_REASONING]: "lmstudioReasoning",
+    [KEY_MLX_REASONING]: "mlxReasoning",
+    [KEY_OLLAMA_REASONING]: "ollamaReasoning",
+    [KEY_OPENROUTER_REASONING]: "openrouterReasoning",
     [KEY_FAVORITE_MODELS]: "favoriteModelIds",
     [KEY_RECENT_MODELS]: "recentModelIds",
     [KEY_VIM_MODE]: "vimMode",

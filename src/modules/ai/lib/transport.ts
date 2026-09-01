@@ -4,6 +4,7 @@ import { runAgentStream, type AgentUsageDelta } from "./agent";
 import type { ProviderKeys, CustomEndpointKeys } from "./keyring";
 import { formatAiError } from "./errors";
 import { native } from "./native";
+import type { ReasoningConfig } from "./reasoningEffort";
 import type { ToolContext } from "../tools/tools";
 
 const NEIRA_MD_MAX_BYTES = 32 * 1024;
@@ -59,6 +60,10 @@ type Deps = {
   getOpenrouterModelId?: () => string | undefined;
   getCustomEndpoints?: () => readonly CustomEndpoint[];
   getCustomEndpointKeys?: () => CustomEndpointKeys;
+  getLmstudioReasoning?: () => ReasoningConfig | null;
+  getMlxReasoning?: () => ReasoningConfig | null;
+  getOllamaReasoning?: () => ReasoningConfig | null;
+  getOpenrouterReasoning?: () => ReasoningConfig | null;
   onStep?: (step: string | null) => void;
   onUsage?: (delta: AgentUsageDelta) => void;
   onCompact?: (info: { droppedCount: number }) => void;
@@ -101,6 +106,10 @@ export function createContextAwareTransport(deps: Deps) {
       openrouterModelId: deps.getOpenrouterModelId?.(),
       customEndpoints: deps.getCustomEndpoints?.(),
       customEndpointKeys: deps.getCustomEndpointKeys?.(),
+      lmstudioReasoning: deps.getLmstudioReasoning?.(),
+      mlxReasoning: deps.getMlxReasoning?.(),
+      ollamaReasoning: deps.getOllamaReasoning?.(),
+      openrouterReasoning: deps.getOpenrouterReasoning?.(),
       projectMemory,
       uiMessages: messagesForRun,
       abortSignal: options.abortSignal,

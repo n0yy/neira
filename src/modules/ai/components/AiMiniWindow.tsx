@@ -31,6 +31,7 @@ import { ContextIndicator } from "./ContextIndicator";
 import { AgentSwitcher } from "./AgentSwitcher";
 import { AiChatView } from "./AiChat";
 import { PermissionModeSwitcher } from "./PermissionModeSwitcher";
+import { ReasoningEffortSwitcher } from "./ReasoningEffortSwitcher";
 import { TodoStrip } from "./TodoStrip";
 
 const SUGGESTIONS = [
@@ -252,6 +253,7 @@ function Header({
           <ContextIndicator messages={messages} />
         ) : null}
         <PermissionModeSwitcher isMiniWindow />
+        <ReasoningEffortSwitcher isMiniWindow />
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {isBusy ? (

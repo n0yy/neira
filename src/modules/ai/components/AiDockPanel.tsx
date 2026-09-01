@@ -12,6 +12,7 @@ import { ContextIndicator } from "./ContextIndicator";
 import { TodoStrip } from "./TodoStrip";
 import { AgentSwitcher } from "./AgentSwitcher";
 import { PermissionModeSwitcher } from "./PermissionModeSwitcher";
+import { ReasoningEffortSwitcher } from "./ReasoningEffortSwitcher";
 import { ModelDropdown } from "./AiStatusBarControls";
 
 const AiComposerInputLazy = lazy(() => import("./AiComposerInput").then((m) => ({ default: m.AiComposerInput })));
@@ -211,6 +212,7 @@ function ComposerFooter({
             />
           ) : null}
           <PermissionModeSwitcher />
+          <ReasoningEffortSwitcher />
           <span className="flex-1" />
           {c.isBusy ? (
             <Button type="button" size="icon" variant="ghost" className="size-6" aria-label="Stop" onClick={c.stop}>

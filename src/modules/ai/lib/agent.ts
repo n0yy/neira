@@ -27,6 +27,13 @@ import { compactModelMessagesDetailed } from "./compact";
 import type { ProviderKeys, CustomEndpointKeys } from "./keyring";
 import { prepareAgentPrompt } from "./prompt";
 import { createProxyFetch } from "./proxyFetch";
+import {
+  buildReasoningRequestFields,
+  isReasoningConfigUsable,
+  resolveActiveReasoningLevel,
+  type ReasoningConfig,
+  type ReasoningRequestFields,
+} from "./reasoningEffort";
 
 const localProxyFetch = createProxyFetch({ allowPrivateNetwork: true });
 
@@ -228,6 +235,10 @@ export type LocalProviderConfig = {
   openrouterModelId?: string;
   customEndpoints?: readonly CustomEndpoint[];
   customEndpointKeys?: CustomEndpointKeys;
+  lmstudioReasoning?: ReasoningConfig | null;
+  mlxReasoning?: ReasoningConfig | null;
+  ollamaReasoning?: ReasoningConfig | null;
+  openrouterReasoning?: ReasoningConfig | null;
 };
 
 export function buildConfiguredLanguageModel(
@@ -298,6 +309,53 @@ export function buildConfiguredLanguageModel(
   });
 }
 
+/**
+ * Reasoning-effort providerOptions for the freeform/self-hosted providers
+ * (custom named endpoints, LM Studio, MLX, Ollama, OpenRouter) — the only
+ * ones with per-model reasoning config (see reasoningEffort.ts). Curated
+ * cloud models never get an entry here; returns undefined for them.
+ */
+export function resolveReasoningProviderOptions(
+  modelId: string,
+  local: LocalProviderConfig,
+): Record<string, ReasoningRequestFields> | undefined {
+  let cfg: ReasoningConfig | null | undefined;
+  let providerKey: string;
+
+  if (isCompatModelId(modelId)) {
+    const eid = endpointIdFromCompatModel(modelId);
+    const ep = local.customEndpoints?.find((e) => e.id === eid);
+    cfg = ep?.reasoning;
+    providerKey = "openai-compatible";
+  } else {
+    const m = resolveModel(modelId);
+    switch (m.id) {
+      case "lmstudio-local":
+        cfg = local.lmstudioReasoning;
+        providerKey = "lmstudio";
+        break;
+      case "mlx-local":
+        cfg = local.mlxReasoning;
+        providerKey = "mlx";
+        break;
+      case "ollama-local":
+        cfg = local.ollamaReasoning;
+        providerKey = "ollama";
+        break;
+      case "openrouter-custom":
+        cfg = local.openrouterReasoning;
+        providerKey = "openrouter";
+        break;
+      default:
+        return undefined;
+    }
+  }
+
+  if (!isReasoningConfigUsable(cfg)) return undefined;
+  const level = resolveActiveReasoningLevel(cfg);
+  return { [providerKey]: buildReasoningRequestFields(cfg.shape, level) };
+}
+
 function buildStableSystem(
   modelId: string,
   persona: { name: string; instructions: string } | null,
@@ -357,6 +415,10 @@ export type RunAgentOptions = {
   openrouterModelId?: string;
   customEndpoints?: readonly CustomEndpoint[];
   customEndpointKeys?: CustomEndpointKeys;
+  lmstudioReasoning?: ReasoningConfig | null;
+  mlxReasoning?: ReasoningConfig | null;
+  ollamaReasoning?: ReasoningConfig | null;
+  openrouterReasoning?: ReasoningConfig | null;
   projectMemory?: string | null;
   uiMessages: UIMessage[];
   abortSignal?: AbortSignal;
@@ -364,7 +426,7 @@ export type RunAgentOptions = {
 
 export async function runAgentStream(opts: RunAgentOptions) {
   const modelId = opts.modelId ?? DEFAULT_MODEL_ID;
-  const model = await buildConfiguredLanguageModel(modelId, opts.keys, {
+  const localConfig: LocalProviderConfig = {
     lmstudioBaseURL: opts.lmstudioBaseURL,
     lmstudioModelId: opts.lmstudioModelId,
     mlxBaseURL: opts.mlxBaseURL,
@@ -376,7 +438,20 @@ export async function runAgentStream(opts: RunAgentOptions) {
     openrouterModelId: opts.openrouterModelId,
     customEndpoints: opts.customEndpoints,
     customEndpointKeys: opts.customEndpointKeys,
-  });
+    lmstudioReasoning: opts.lmstudioReasoning,
+    mlxReasoning: opts.mlxReasoning,
+    ollamaReasoning: opts.ollamaReasoning,
+    openrouterReasoning: opts.openrouterReasoning,
+  };
+  const model = await buildConfiguredLanguageModel(
+    modelId,
+    opts.keys,
+    localConfig,
+  );
+  const reasoningProviderOptions = resolveReasoningProviderOptions(
+    modelId,
+    localConfig,
+  );
   const endpoints = opts.customEndpoints ?? [];
   const info = resolveModel(modelId, endpoints);
   const provider = info.provider;
@@ -419,6 +494,9 @@ export async function runAgentStream(opts: RunAgentOptions) {
     tools: buildTools(opts.toolContext),
     stopWhen: stepCountIs(MAX_AGENT_STEPS),
     abortSignal: opts.abortSignal,
+    ...(reasoningProviderOptions
+      ? { providerOptions: reasoningProviderOptions }
+      : {}),
     onStepFinish: (step) => {
       stepsSeen++;
       if (opts.onStep) {

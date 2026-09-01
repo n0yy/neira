@@ -59,16 +59,26 @@ import {
   setFavoriteModelIds,
   setLmstudioBaseURL,
   setLmstudioModelId,
+  setLmstudioReasoning,
   setMlxBaseURL,
   setMlxModelId,
+  setMlxReasoning,
   setOllamaBaseURL,
   setOllamaModelId,
+  setOllamaReasoning,
   setOpenaiCompatibleBaseURL,
   setOpenaiCompatibleContextLimit,
   setOpenaiCompatibleModelId,
   setOpenrouterModelId,
+  setOpenrouterReasoning,
   setRecentModelIds,
 } from "@/modules/settings/store";
+import {
+  emptyReasoningConfig,
+  REASONING_SHAPES,
+  type ReasoningConfig,
+  type ReasoningShape,
+} from "@/modules/ai/lib/reasoningEffort";
 import {
   Add01Icon,
   ArrowDown01Icon,
@@ -159,6 +169,12 @@ export function ModelsSection() {
   );
   const openrouterModelId = usePreferencesStore((s) => s.openrouterModelId);
   const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
+  const lmstudioReasoning = usePreferencesStore((s) => s.lmstudioReasoning);
+  const mlxReasoning = usePreferencesStore((s) => s.mlxReasoning);
+  const ollamaReasoning = usePreferencesStore((s) => s.ollamaReasoning);
+  const openrouterReasoning = usePreferencesStore(
+    (s) => s.openrouterReasoning,
+  );
 
   useEffect(() => {
     void getAllKeys().then(setKeys);
@@ -265,6 +281,8 @@ export function ModelsSection() {
           modelId: lmstudioModelId,
           setBaseURL: setLmstudioBaseURL,
           setModelId: setLmstudioModelId,
+          reasoning: lmstudioReasoning,
+          setReasoning: setLmstudioReasoning,
         };
       case "mlx":
         return {
@@ -272,6 +290,8 @@ export function ModelsSection() {
           modelId: mlxModelId,
           setBaseURL: setMlxBaseURL,
           setModelId: setMlxModelId,
+          reasoning: mlxReasoning,
+          setReasoning: setMlxReasoning,
         };
       case "ollama":
         return {
@@ -279,6 +299,8 @@ export function ModelsSection() {
           modelId: ollamaModelId,
           setBaseURL: setOllamaBaseURL,
           setModelId: setOllamaModelId,
+          reasoning: ollamaReasoning,
+          setReasoning: setOllamaReasoning,
         };
       case "openai-compatible":
         return {
@@ -288,6 +310,8 @@ export function ModelsSection() {
           setModelId: setOpenaiCompatibleModelId,
           contextLimit: compatContextLimit,
           setContextLimit: setOpenaiCompatibleContextLimit,
+          reasoning: null,
+          setReasoning: async () => {},
         };
       case "openrouter":
         return {
@@ -296,6 +320,8 @@ export function ModelsSection() {
           setBaseURL: async () => {},
           setModelId: setOpenrouterModelId,
           noBaseURL: true,
+          reasoning: openrouterReasoning,
+          setReasoning: setOpenrouterReasoning,
         };
       default:
         return null;
@@ -449,6 +475,8 @@ type LocalConfig = {
   contextLimit?: number;
   setContextLimit?: (v: number) => Promise<void>;
   noBaseURL?: boolean;
+  reasoning: ReasoningConfig | null;
+  setReasoning: (v: ReasoningConfig) => Promise<void>;
 };
 
 function AddProviderMenu({
@@ -1072,6 +1100,11 @@ function LocalProviderCard({
             {meta.modelHint}
           </p>
         ) : null}
+
+        <ReasoningEffortFields
+          config={config.reasoning}
+          onChange={config.setReasoning}
+        />
       </div>
     </div>
   );
@@ -1300,8 +1333,114 @@ function CustomEndpointCard({
           </FieldRow>
 
           <StatusLine status={testStatus} />
+
+          <ReasoningEffortFields
+            config={endpoint.reasoning ?? null}
+            onChange={(next) => onUpdate({ reasoning: next })}
+          />
         </div>
       )}
+    </div>
+  );
+}
+
+function ReasoningEffortFields({
+  config,
+  onChange,
+}: {
+  config: ReasoningConfig | null;
+  onChange: (next: ReasoningConfig) => Promise<void>;
+}) {
+  const cfg = config ?? emptyReasoningConfig();
+  const [levelsDraft, setLevelsDraft] = useState(cfg.levels.join(", "));
+
+  useEffect(() => setLevelsDraft(cfg.levels.join(", ")), [cfg.levels]);
+
+  const commitLevels = () => {
+    const levels = levelsDraft
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (levels.join(", ") === cfg.levels.join(", ")) return;
+    const defaultLevel = levels.includes(cfg.defaultLevel)
+      ? cfg.defaultLevel
+      : (levels[0] ?? "");
+    const activeLevel = levels.includes(cfg.activeLevel) ? cfg.activeLevel : "";
+    void onChange({ ...cfg, levels, defaultLevel, activeLevel });
+  };
+
+  return (
+    <div className="flex flex-col gap-2.5 rounded-md border border-border/40 bg-muted/20 px-2.5 py-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-medium">Reasoning effort</span>
+        <Switch
+          checked={cfg.enabled}
+          onCheckedChange={(checked) => void onChange({ ...cfg, enabled: checked })}
+        />
+      </div>
+
+      {cfg.enabled ? (
+        <>
+          <FieldRow label="Shape">
+            <Select
+              value={cfg.shape}
+              onValueChange={(v) =>
+                void onChange({ ...cfg, shape: v as ReasoningShape })
+              }
+            >
+              <SelectTrigger className="h-8 flex-1 text-[11.5px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {REASONING_SHAPES.map((s) => (
+                  <SelectItem
+                    key={s.value}
+                    value={s.value}
+                    className="text-[11.5px]"
+                  >
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldRow>
+
+          <FieldRow label="Levels">
+            <Input
+              value={levelsDraft}
+              onChange={(e) => setLevelsDraft(e.target.value)}
+              onBlur={commitLevels}
+              placeholder="low, medium, xhigh"
+              spellCheck={false}
+              className="h-8 flex-1 font-mono text-[11.5px]"
+            />
+          </FieldRow>
+
+          {cfg.levels.length > 0 ? (
+            <FieldRow label="Default">
+              <Select
+                value={cfg.levels.includes(cfg.defaultLevel) ? cfg.defaultLevel : cfg.levels[0]}
+                onValueChange={(v) => void onChange({ ...cfg, defaultLevel: v })}
+              >
+                <SelectTrigger className="h-8 flex-1 text-[11.5px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {cfg.levels.map((l) => (
+                    <SelectItem key={l} value={l} className="text-[11.5px]">
+                      {l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldRow>
+          ) : (
+            <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+              Enter the exact level names this backend accepts, comma-separated.
+            </p>
+          )}
+        </>
+      ) : null}
     </div>
   );
 }

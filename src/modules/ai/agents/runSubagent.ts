@@ -2,6 +2,7 @@ import { generateText, stepCountIs } from "ai";
 import { DEFAULT_MODEL_ID, type ModelId } from "../config";
 import {
   buildConfiguredLanguageModel,
+  resolveReasoningProviderOptions,
   type LocalProviderConfig,
 } from "../lib/agent";
 import type { ProviderKeys } from "../lib/keyring";
@@ -149,6 +150,10 @@ export async function runSubagent({
   // `buildConfiguredLanguageModel` is the same resolver the main chat loop
   // uses (see `runAgentStream` in lib/agent.ts).
   const model = await buildConfiguredLanguageModel(modelId, keys, local);
+  const reasoningProviderOptions = resolveReasoningProviderOptions(
+    modelId,
+    local,
+  );
 
   const start = Date.now();
   const steps: SubagentStep[] = [];
@@ -158,6 +163,9 @@ export async function runSubagent({
     prompt,
     tools: tools as Parameters<typeof generateText>[0]["tools"],
     stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
+    ...(reasoningProviderOptions
+      ? { providerOptions: reasoningProviderOptions }
+      : {}),
     onStepFinish: (step) => {
       if (step.reasoningText) {
         const reasoningStep: SubagentStep = {

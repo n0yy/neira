@@ -1,3 +1,5 @@
+import type { ReasoningConfig } from "./lib/reasoningEffort";
+
 export const KEYRING_SERVICE = "neira";
 
 export type ProviderId =
@@ -126,6 +128,7 @@ export type CustomEndpoint = {
   baseURL: string;
   modelId: string;
   contextLimit: number;
+  reasoning?: ReasoningConfig | null;
 };
 
 const COMPAT_MODEL_PREFIX = "compat-";

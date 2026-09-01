@@ -83,6 +83,42 @@ describe("runSubagent", () => {
     expect(generateTextMock).toHaveBeenCalledTimes(1);
   });
 
+  it("passes the endpoint's configured reasoning effort through to generateText's providerOptions", async () => {
+    await runSubagent({
+      type: "atlassian-explorer",
+      prompt: "find jira tickets related to the login flow",
+      keys: {} as never,
+      modelId: "compat-db5061e3",
+      toolContext: makeContext(),
+      customEndpoints: [
+        {
+          id: "db5061e3",
+          name: "My local model",
+          baseURL: "http://localhost:1234/v1",
+          modelId: "qwen3.8-flash-next",
+          contextLimit: 262_000,
+          reasoning: {
+            enabled: true,
+            shape: "chat-template-kwargs",
+            levels: ["low", "medium", "xhigh"],
+            defaultLevel: "medium",
+            activeLevel: "low",
+          },
+        },
+      ],
+    } as never);
+
+    expect(generateTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerOptions: {
+          "openai-compatible": {
+            chat_template_kwargs: { reasoning_effort: "low" },
+          },
+        },
+      }),
+    );
+  });
+
   it("captures a step trace (tool name, input, output, duration) instead of discarding it", async () => {
     mockGenerateText([
       {
