@@ -19,6 +19,7 @@ import {
   endpointIdFromCompatModel,
   isCompatModelId,
   resolveModel,
+  type CustomEndpoint,
 } from "../config";
 import {
   isReasoningConfigUsable,
@@ -37,10 +38,19 @@ type Target =
   | { kind: "endpoint"; endpointId: string; cfg: ReasoningConfig }
   | { kind: "lmstudio" | "mlx" | "ollama" | "openrouter"; cfg: ReasoningConfig };
 
-/** Resolves the reasoning config (if any) that applies to the given model id, and how to persist a new active level for it. */
-function resolveTarget(modelId: string): Target | null {
-  const prefs = usePreferencesStore.getState();
+type ReasoningPrefsSlice = {
+  customEndpoints: readonly CustomEndpoint[];
+  lmstudioReasoning: ReasoningConfig | null;
+  mlxReasoning: ReasoningConfig | null;
+  ollamaReasoning: ReasoningConfig | null;
+  openrouterReasoning: ReasoningConfig | null;
+};
 
+/** Resolves the reasoning config (if any) that applies to the given model id, and how to persist a new active level for it. Pure: takes the relevant preference values directly rather than reading the store, so a caller with a reactive subscription (the component below) is guaranteed a fresh result on every render. */
+export function resolveTargetFrom(
+  modelId: string,
+  prefs: ReasoningPrefsSlice,
+): Target | null {
   if (isCompatModelId(modelId)) {
     const eid = endpointIdFromCompatModel(modelId);
     const ep = prefs.customEndpoints.find((e) => e.id === eid);
@@ -71,28 +81,45 @@ function resolveTarget(modelId: string): Target | null {
   }
 }
 
-async function persistActiveLevel(target: Target, level: string): Promise<void> {
+/** Convenience wrapper for callers outside a React render (tests, imperative call sites) that don't already have a reactive subscription to the relevant fields. */
+export function resolveTarget(modelId: string): Target | null {
+  const prefs = usePreferencesStore.getState();
+  return resolveTargetFrom(modelId, prefs);
+}
+
+export async function persistActiveLevel(
+  target: Target,
+  level: string,
+): Promise<void> {
   const next: ReasoningConfig = { ...target.cfg, activeLevel: level };
   switch (target.kind) {
     case "endpoint": {
-      const endpoints = usePreferencesStore.getState().customEndpoints;
-      await setCustomEndpoints(
-        endpoints.map((e) =>
-          e.id === target.endpointId ? { ...e, reasoning: next } : e,
-        ),
+      const endpoints = usePreferencesStore.getState().customEndpoints.map(
+        (e) => (e.id === target.endpointId ? { ...e, reasoning: next } : e),
       );
+      // Optimistic local update: AgentSwitcher/PermissionModeSwitcher's
+      // stores set() synchronously before persisting; without this, the
+      // trigger only updates once the async Tauri store round-trip
+      // (writePref -> onPreferencesChange) completes, which reads as the
+      // pick "not sticking" if that round-trip is slow or reordered.
+      usePreferencesStore.setState({ customEndpoints: endpoints });
+      await setCustomEndpoints(endpoints);
       return;
     }
     case "lmstudio":
+      usePreferencesStore.setState({ lmstudioReasoning: next });
       await setLmstudioReasoning(next);
       return;
     case "mlx":
+      usePreferencesStore.setState({ mlxReasoning: next });
       await setMlxReasoning(next);
       return;
     case "ollama":
+      usePreferencesStore.setState({ ollamaReasoning: next });
       await setOllamaReasoning(next);
       return;
     case "openrouter":
+      usePreferencesStore.setState({ openrouterReasoning: next });
       await setOpenrouterReasoning(next);
       return;
   }
@@ -104,15 +131,25 @@ export function ReasoningEffortSwitcher({
   isMiniWindow?: boolean;
 }) {
   const modelId = useChatStore((s) => s.selectedModelId);
-  // Subscribe so the trigger re-renders live when reasoning config changes.
-  usePreferencesStore((s) => s.customEndpoints);
-  usePreferencesStore((s) => s.lmstudioReasoning);
-  usePreferencesStore((s) => s.mlxReasoning);
-  usePreferencesStore((s) => s.ollamaReasoning);
-  usePreferencesStore((s) => s.openrouterReasoning);
+  // Direct reactive subscriptions (not a getState() snapshot) so a write
+  // from persistActiveLevel is guaranteed to re-render this trigger with
+  // the new value, the same pattern AgentSwitcher/PermissionModeSwitcher use.
+  const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
+  const lmstudioReasoning = usePreferencesStore((s) => s.lmstudioReasoning);
+  const mlxReasoning = usePreferencesStore((s) => s.mlxReasoning);
+  const ollamaReasoning = usePreferencesStore((s) => s.ollamaReasoning);
+  const openrouterReasoning = usePreferencesStore(
+    (s) => s.openrouterReasoning,
+  );
   const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
 
-  const target = resolveTarget(modelId);
+  const target = resolveTargetFrom(modelId, {
+    customEndpoints,
+    lmstudioReasoning,
+    mlxReasoning,
+    ollamaReasoning,
+    openrouterReasoning,
+  });
   if (!target) return null;
 
   const active = resolveActiveReasoningLevel(target.cfg);
