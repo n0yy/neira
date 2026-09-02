@@ -136,6 +136,7 @@ export async function buildLanguageModel(
         name: "deepseek",
         baseURL: "https://api.deepseek.com",
         apiKey: key,
+        includeUsage: true,
       })(resolvedModelId);
       break;
     }
@@ -146,6 +147,7 @@ export async function buildLanguageModel(
         name: "mistral",
         baseURL: "https://api.mistral.ai/v1",
         apiKey: key,
+        includeUsage: true,
       })(resolvedModelId);
       break;
     }
@@ -165,6 +167,7 @@ export async function buildLanguageModel(
           "HTTP-Referer": "https://neira.ai",
           "X-Title": "Neira",
         },
+        includeUsage: true,
       })(resolvedModelId);
       break;
     }
@@ -181,6 +184,7 @@ export async function buildLanguageModel(
         baseURL: compatURL,
         apiKey: epKey || key || undefined,
         fetch: localProxyFetch,
+        includeUsage: true,
       })(resolvedModelId);
       break;
     }
@@ -191,6 +195,7 @@ export async function buildLanguageModel(
         name: "lmstudio",
         baseURL: lmstudioURL,
         fetch: localProxyFetch,
+        includeUsage: true,
       })(resolvedModelId);
       break;
     }
@@ -201,6 +206,7 @@ export async function buildLanguageModel(
         name: "mlx",
         baseURL: mlxURL,
         fetch: localProxyFetch,
+        includeUsage: true,
       })(resolvedModelId);
       break;
     }
@@ -211,6 +217,7 @@ export async function buildLanguageModel(
         name: "ollama",
         baseURL: ollamaURL,
         fetch: localProxyFetch,
+        includeUsage: true,
       })(resolvedModelId);
       break;
     }
@@ -311,7 +318,7 @@ export function buildConfiguredLanguageModel(
 
 /**
  * Reasoning-effort providerOptions for the freeform/self-hosted providers
- * (custom named endpoints, LM Studio, MLX, Ollama, OpenRouter) — the only
+ * (custom named endpoints, LM Studio, MLX, Ollama, OpenRouter), the only
  * ones with per-model reasoning config (see reasoningEffort.ts). Curated
  * cloud models never get an entry here; returns undefined for them.
  */

@@ -2,7 +2,7 @@
  * Per-model "reasoning effort" configuration for freeform/self-hosted
  * providers (custom OpenAI-compatible endpoints, LM Studio, MLX, Ollama,
  * OpenRouter). These providers don't share a standard way to control
- * thinking effort — each backend expects its own request-body shape — so
+ * thinking effort: each backend expects its own request-body shape, so
  * the user defines exactly which levels their model supports and how to
  * send them, rather than picking from a fixed Neira-defined vocabulary.
  */
@@ -20,12 +20,19 @@ export type ReasoningConfig = {
   activeLevel: string;
 };
 
-export const REASONING_SHAPES: readonly { value: ReasoningShape; label: string }[] =
-  [
-    { value: "flat", label: "Flat reasoning_effort" },
-    { value: "chat-template-kwargs", label: "chat_template_kwargs (llama.cpp)" },
-    { value: "openrouter", label: "OpenRouter reasoning.effort" },
-  ];
+export const REASONING_SHAPES: readonly {
+  value: ReasoningShape;
+  label: string;
+  hint?: string;
+}[] = [
+  { value: "flat", label: "Flat reasoning_effort" },
+  {
+    value: "chat-template-kwargs",
+    label: "chat_template_kwargs (llama.cpp)",
+    hint: "A proxy in front of your backend (e.g. LiteLLM) commonly strips this field silently: the request still succeeds, the level is just ignored. Try Flat first and confirm it actually changes the response before assuming this one is applied.",
+  },
+  { value: "openrouter", label: "OpenRouter reasoning.effort" },
+];
 
 export function emptyReasoningConfig(): ReasoningConfig {
   return { enabled: false, shape: "flat", levels: [], defaultLevel: "", activeLevel: "" };

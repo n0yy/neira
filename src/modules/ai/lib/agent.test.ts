@@ -1,6 +1,18 @@
-import { describe, expect, it } from "vitest";
-import type { CustomEndpoint } from "../config";
-import { resolveReasoningProviderOptions, type LocalProviderConfig } from "./agent";
+const createOpenAICompatibleMock = vi.hoisted(() =>
+  vi.fn(() => () => ({ modelId: "mock" })),
+);
+
+vi.mock("@ai-sdk/openai-compatible", () => ({
+  createOpenAICompatible: createOpenAICompatibleMock,
+}));
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { CustomEndpoint, ProviderId } from "../config";
+import {
+  buildLanguageModel,
+  resolveReasoningProviderOptions,
+  type LocalProviderConfig,
+} from "./agent";
 import type { ReasoningConfig } from "./reasoningEffort";
 
 function reasoning(overrides: Partial<ReasoningConfig> = {}): ReasoningConfig {
@@ -13,6 +25,41 @@ function reasoning(overrides: Partial<ReasoningConfig> = {}): ReasoningConfig {
     ...overrides,
   };
 }
+
+describe("buildLanguageModel: openai-compatible-routed providers", () => {
+  beforeEach(() => {
+    createOpenAICompatibleMock.mockClear();
+  });
+
+  // Bug: none of these passed `includeUsage: true`, so `stream_options.
+  // include_usage` was never sent, and the server never returns a `usage`
+  // object during streaming (confirmed live against a self-hosted
+  // OpenAI-compatible endpoint: step.usage came back completely empty,
+  // inputTokens/outputTokens both undefined, until this flag was added).
+  // ContextIndicator then silently fell back to a rough char/4 estimate
+  // for the whole session, which is why "thinking" tokens looked uncounted:
+  // the real bug was ALL usage tracking for these 7 providers, not
+  // reasoning specifically.
+  const cases: { provider: ProviderId; extra?: Record<string, unknown> }[] = [
+    { provider: "deepseek" },
+    { provider: "mistral" },
+    { provider: "openrouter" },
+    { provider: "openai-compatible", extra: { openaiCompatibleBaseURL: "http://x/v1" } },
+    { provider: "lmstudio" },
+    { provider: "mlx" },
+    { provider: "ollama" },
+  ];
+
+  for (const { provider, extra } of cases) {
+    it(`passes includeUsage: true for ${provider}`, async () => {
+      const keys = { [provider]: "test-key" } as never;
+      await buildLanguageModel(provider, keys, `model-${provider}`, extra);
+      expect(createOpenAICompatibleMock).toHaveBeenCalledWith(
+        expect.objectContaining({ includeUsage: true }),
+      );
+    });
+  }
+});
 
 describe("resolveReasoningProviderOptions", () => {
   it("returns undefined for a curated cloud model id", () => {

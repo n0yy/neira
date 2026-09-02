@@ -59,7 +59,8 @@ export const usePermissionModeStore = create<PermissionModeState>(
       void saveSkipAutoConfirm(skip).then(broadcast);
     },
     resetForNewSession: () => {
-      if (get().mode === "plan") return;
+      const current = get().mode;
+      if (current === "plan" || current === "manual") return;
       get().setMode("manual");
     },
   }),

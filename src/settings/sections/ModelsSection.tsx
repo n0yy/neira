@@ -1405,6 +1405,15 @@ function ReasoningEffortFields({
             </Select>
           </FieldRow>
 
+          {(() => {
+            const hint = REASONING_SHAPES.find((s) => s.value === cfg.shape)?.hint;
+            return hint ? (
+              <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+                {hint}
+              </p>
+            ) : null;
+          })()}
+
           <FieldRow label="Levels">
             <Input
               value={levelsDraft}
