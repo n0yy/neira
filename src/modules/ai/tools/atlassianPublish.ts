@@ -119,44 +119,83 @@ export function buildAtlassianPublishTools(ctx: ToolContext) {
 
     push_jira: tool({
       description:
-        "Create or update a Jira issue for a ticket Artifact. Decides create-vs-update by searching for the issue's exact summary first. Uses the project's default issue type. Optionally links the issue as \"is blocked by\" a previously-created issue key.",
-      inputSchema: z.object({
-        summary: z
-          .string()
-          .describe(
-            'Exact issue summary — used both to find an existing issue and to create a new one. Use "[<feature-slug>] <ticket title>".',
-          ),
-        description: z.string().describe("Issue description body, plain text."),
-        blockedByKey: z
-          .string()
-          .optional()
-          .describe(
-            "Issue key of a previously-pushed blocking ticket, if this one is blocked by it. Push tickets in ascending dependency order so the blocker already exists.",
-          ),
-        projectKey: z
-          .string()
-          .optional()
-          .describe(
-            "Jira project key. Only required when more than one project is selected in Settings → Integrations.",
-          ),
-      }),
+        'Create or update a Jira Epic or Task issue Artifact. Decides create-vs-update by searching for the issue\'s exact summary first. "epic" needs just a summary/description. "task" needs an `epicKey` (sets Jira\'s `parent` field — team-managed projects only) and optionally a `blockedByKey` for a native "is blocked by" link to a previously-pushed sibling ticket.',
+      inputSchema: z.discriminatedUnion("kind", [
+        z.object({
+          kind: z.literal("epic"),
+          summary: z
+            .string()
+            .describe(
+              'Exact issue summary — used both to find an existing Epic and to create a new one. Use "<feature-slug>".',
+            ),
+          description: z
+            .string()
+            .describe("Epic description body, plain text."),
+          projectKey: z
+            .string()
+            .optional()
+            .describe(
+              "Jira project key. Only required when more than one project is selected in Settings → Integrations.",
+            ),
+        }),
+        z.object({
+          kind: z.literal("task"),
+          summary: z
+            .string()
+            .describe(
+              'Exact issue summary — used both to find an existing issue and to create a new one. Use "[<feature-slug>] <ticket title>".',
+            ),
+          description: z
+            .string()
+            .describe("Issue description body, plain text."),
+          epicKey: z
+            .string()
+            .describe(
+              "Issue key of this ticket's Epic, from a prior kind: \"epic\" push_jira call. Sets Jira's parent field (team-managed projects only).",
+            ),
+          blockedByKey: z
+            .string()
+            .optional()
+            .describe(
+              "Issue key of a previously-pushed blocking ticket, if this one is blocked by it. Push tickets in ascending dependency order so the blocker already exists.",
+            ),
+          projectKey: z
+            .string()
+            .optional()
+            .describe(
+              "Jira project key. Only required when more than one project is selected in Settings → Integrations.",
+            ),
+        }),
+      ]),
       needsApproval: () => !autoApprovesEdits(ctx.getPermissionMode()),
-      execute: async ({ summary, description, blockedByKey, projectKey }) => {
+      execute: async (input) => {
         const target = await resolvePublishTarget(
           "projects",
           "jiraEnabled",
           "Jira is not enabled for this Atlassian connection.",
           "Jira project",
-          projectKey,
+          input.projectKey,
         );
         if (!target.ok) return { error: target.error };
         try {
-          return await upsertJiraIssue(target.creds, {
-            projectKey: target.key,
-            summary,
-            description,
-            blockedByKey,
-          });
+          return await upsertJiraIssue(
+            target.creds,
+            input.kind === "epic"
+              ? {
+                  kind: "epic",
+                  projectKey: target.key,
+                  summary: input.summary,
+                  description: input.description,
+                }
+              : {
+                  kind: "task",
+                  projectKey: target.key,
+                  summary: input.summary,
+                  description: input.description,
+                  epicKey: input.epicKey,
+                  blockedByKey: input.blockedByKey,
+                },
+          );
         } catch (e) {
           return { error: String(e) };
         }

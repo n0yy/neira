@@ -514,23 +514,26 @@ function adfFromText(text: string): unknown {
   return { type: "doc", version: 1, content: paragraphs };
 }
 
-/** Finds a Jira issue by its exact summary within one project, via the existing read-only `searchJql`. */
+/** Finds a Jira issue by its exact summary within one project, via the existing read-only `searchJql`. Pass `issueTypeName` to avoid an Epic and a Task colliding on the same summary text. */
 export async function findJiraIssueBySummary(
   creds: AtlassianCredentials,
   projectKey: string,
   summary: string,
+  issueTypeName?: string,
 ): Promise<{ key: string } | null> {
-  const jql = `summary ~ "${summary.replace(/"/g, '\\"')}"`;
+  const base = `summary ~ "${summary.replace(/"/g, '\\"')}"`;
+  const jql = issueTypeName
+    ? `${base} AND issuetype = "${issueTypeName.replace(/"/g, '\\"')}"`
+    : base;
   const hits = await searchJql(creds, jql, [projectKey]);
   const exact = hits.find((h) => h.summary === summary);
   return exact ? { key: exact.key } : null;
 }
 
-/** The project's first non-subtask issue type — used as the "default" type for created issues (not configurable in v1). */
-export async function getDefaultJiraIssueType(
+async function fetchJiraProjectIssueTypes(
   creds: AtlassianCredentials,
   projectKey: string,
-): Promise<{ id: string; name: string }> {
+): Promise<Array<{ id: string; name: string; subtask: boolean }>> {
   const res = await atlassianFetch(
     creds,
     `/rest/api/3/project/${encodeURIComponent(projectKey)}`,
@@ -539,7 +542,16 @@ export async function getDefaultJiraIssueType(
   const data = (await res.json()) as {
     issueTypes?: Array<{ id: string; name: string; subtask: boolean }>;
   };
-  const type = (data.issueTypes ?? []).find((t) => !t.subtask);
+  return data.issueTypes ?? [];
+}
+
+/** The project's first non-subtask, non-Epic issue type — used as the "default" type for created Task issues (not configurable in v1). */
+export async function getDefaultJiraIssueType(
+  creds: AtlassianCredentials,
+  projectKey: string,
+): Promise<{ id: string; name: string }> {
+  const types = await fetchJiraProjectIssueTypes(creds, projectKey);
+  const type = types.find((t) => !t.subtask && t.name !== "Epic");
   if (!type) {
     throw new AtlassianApiError(
       `Project ${projectKey} has no non-subtask issue types.`,
@@ -548,20 +560,45 @@ export async function getDefaultJiraIssueType(
   return { id: type.id, name: type.name };
 }
 
-/** Creates a new Jira issue using the project's default issue type. */
+/** Finds a project's issue type by its exact name (e.g. "Epic" — a Jira system type name, safe to hardcode; not configurable in v1). */
+export async function getJiraIssueTypeByName(
+  creds: AtlassianCredentials,
+  projectKey: string,
+  name: string,
+): Promise<{ id: string; name: string }> {
+  const types = await fetchJiraProjectIssueTypes(creds, projectKey);
+  const type = types.find((t) => t.name === name);
+  if (!type) {
+    throw new AtlassianApiError(
+      `Project ${projectKey} has no "${name}" issue type.`,
+    );
+  }
+  return { id: type.id, name: type.name };
+}
+
+/** Creates a new Jira issue. Uses the project's default issue type unless `issueTypeId` is given; sets `parent` when `parentKey` is given (team-managed-project epic-child linking — see ADR 0006). */
 export async function createJiraIssue(
   creds: AtlassianCredentials,
-  params: { projectKey: string; summary: string; description: string },
+  params: {
+    projectKey: string;
+    summary: string;
+    description: string;
+    issueTypeId?: string;
+    parentKey?: string;
+  },
 ): Promise<JiraWriteResult> {
-  const issueType = await getDefaultJiraIssueType(creds, params.projectKey);
+  const issueTypeId =
+    params.issueTypeId ??
+    (await getDefaultJiraIssueType(creds, params.projectKey)).id;
   const res = await atlassianFetch(creds, "/rest/api/3/issue", {
     method: "POST",
     body: JSON.stringify({
       fields: {
         project: { key: params.projectKey },
         summary: params.summary,
-        issuetype: { id: issueType.id },
+        issuetype: { id: issueTypeId },
         description: adfFromText(params.description),
+        ...(params.parentKey ? { parent: { key: params.parentKey } } : {}),
       },
     }),
   });
@@ -608,46 +645,78 @@ export async function createJiraBlockedByLink(
   requireOk(res);
 }
 
-export type JiraTicketArtifact = {
-  projectKey: string;
-  summary: string;
-  description: string;
-  /** Issue key of a previously-pushed blocking ticket, if any. */
-  blockedByKey?: string;
-};
+export type JiraIssueArtifact =
+  | {
+      kind: "epic";
+      projectKey: string;
+      summary: string;
+      description: string;
+    }
+  | {
+      kind: "task";
+      projectKey: string;
+      summary: string;
+      description: string;
+      /** Key of this ticket's Epic — set as the `parent` field (team-managed-project epic-child linking; see ADR 0006). */
+      epicKey: string;
+      /** Issue key of a previously-pushed blocking ticket, if any. Orthogonal to `epicKey`: Jira's parent-link doesn't imply blocking. */
+      blockedByKey?: string;
+    };
 
 /**
- * Creates or updates a Jira issue for a ticket Artifact, deciding which by
- * searching for the issue's predictable summary first — see
+ * Creates or updates a Jira issue for an Epic or ticket Artifact, deciding
+ * which by searching for the issue's predictable summary first — see
  * `findJiraIssueBySummary`. No issue-key mapping is stored anywhere else.
+ * The Epic search is scoped to `issuetype = Epic` so it can't collide with a
+ * same-named Task.
  */
 export async function upsertJiraIssue(
   creds: AtlassianCredentials,
-  params: JiraTicketArtifact,
+  params: JiraIssueArtifact,
 ): Promise<JiraWriteResult & { action: "created" | "updated" }> {
   const existing = await findJiraIssueBySummary(
     creds,
     params.projectKey,
     params.summary,
+    params.kind === "epic" ? "Epic" : undefined,
   );
-  const result = existing
-    ? {
-        ...(await updateJiraIssue(creds, {
-          key: existing.key,
-          summary: params.summary,
-          description: params.description,
-        })),
-        action: "updated" as const,
-      }
-    : {
-        ...(await createJiraIssue(creds, {
-          projectKey: params.projectKey,
-          summary: params.summary,
-          description: params.description,
-        })),
-        action: "created" as const,
-      };
-  if (params.blockedByKey) {
+  let result: JiraWriteResult & { action: "created" | "updated" };
+  if (existing) {
+    result = {
+      ...(await updateJiraIssue(creds, {
+        key: existing.key,
+        summary: params.summary,
+        description: params.description,
+      })),
+      action: "updated",
+    };
+  } else if (params.kind === "epic") {
+    const epicType = await getJiraIssueTypeByName(
+      creds,
+      params.projectKey,
+      "Epic",
+    );
+    result = {
+      ...(await createJiraIssue(creds, {
+        projectKey: params.projectKey,
+        summary: params.summary,
+        description: params.description,
+        issueTypeId: epicType.id,
+      })),
+      action: "created",
+    };
+  } else {
+    result = {
+      ...(await createJiraIssue(creds, {
+        projectKey: params.projectKey,
+        summary: params.summary,
+        description: params.description,
+        parentKey: params.epicKey,
+      })),
+      action: "created",
+    };
+  }
+  if (params.kind === "task" && params.blockedByKey) {
     await createJiraBlockedByLink(creds, {
       blockedKey: result.key,
       blockerKey: params.blockedByKey,

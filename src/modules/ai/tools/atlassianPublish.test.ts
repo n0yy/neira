@@ -197,18 +197,20 @@ describe("push_confluence", () => {
   });
 });
 
-describe("push_jira", () => {
+describe("push_jira (task)", () => {
   it("errors when Jira is disabled", async () => {
     getAtlassianTokenMock.mockResolvedValue("tok");
     prefs.atlassianJiraEnabled = false;
     const r = await runTool("push_jira", {
+      kind: "task",
       summary: "[slug] ticket",
       description: "body",
+      epicKey: "ENG-1",
     });
     expect(r.error).toMatch(/jira is not enabled/i);
   });
 
-  it("auto-uses the single selected project and forwards blockedByKey", async () => {
+  it("auto-uses the single selected project and forwards epicKey/blockedByKey", async () => {
     getAtlassianTokenMock.mockResolvedValue("tok");
     prefs.atlassianSelectedProjects = ["ENG"];
     upsertJiraIssueMock.mockResolvedValue({
@@ -218,17 +220,21 @@ describe("push_jira", () => {
     });
 
     const r = await runTool("push_jira", {
+      kind: "task",
       summary: "[slug] ticket",
       description: "body",
+      epicKey: "ENG-1",
       blockedByKey: "ENG-4",
     });
 
     expect(upsertJiraIssueMock).toHaveBeenCalledWith(
       { site: "acme.atlassian.net", email: "a@acme.com", token: "tok" },
       {
+        kind: "task",
         projectKey: "ENG",
         summary: "[slug] ticket",
         description: "body",
+        epicKey: "ENG-1",
         blockedByKey: "ENG-4",
       },
     );
@@ -239,10 +245,41 @@ describe("push_jira", () => {
     getAtlassianTokenMock.mockResolvedValue("tok");
     prefs.atlassianSelectedProjects = ["ENG", "DES"];
     const r = await runTool("push_jira", {
+      kind: "task",
       summary: "[slug] ticket",
       description: "body",
+      epicKey: "ENG-1",
     });
     expect(r.error).toMatch(/multiple jira projects/i);
     expect(upsertJiraIssueMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("push_jira (epic)", () => {
+  it("forwards kind: epic without epicKey/blockedByKey", async () => {
+    getAtlassianTokenMock.mockResolvedValue("tok");
+    prefs.atlassianSelectedProjects = ["ENG"];
+    upsertJiraIssueMock.mockResolvedValue({
+      key: "ENG-1",
+      url: "https://acme.atlassian.net/browse/ENG-1",
+      action: "created",
+    });
+
+    const r = await runTool("push_jira", {
+      kind: "epic",
+      summary: "my-feature",
+      description: "Spec: https://acme.atlassian.net/wiki/spaces/ENG/x",
+    });
+
+    expect(upsertJiraIssueMock).toHaveBeenCalledWith(
+      { site: "acme.atlassian.net", email: "a@acme.com", token: "tok" },
+      {
+        kind: "epic",
+        projectKey: "ENG",
+        summary: "my-feature",
+        description: "Spec: https://acme.atlassian.net/wiki/spaces/ENG/x",
+      },
+    );
+    expect(r.action).toBe("created");
   });
 });

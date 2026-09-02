@@ -15,6 +15,7 @@ import {
   findJiraIssueBySummary,
   getConfluencePage,
   getDefaultJiraIssueType,
+  getJiraIssueTypeByName,
   getOrCreateConfluenceParentPage,
   getJiraIssue,
   listConfluenceSpaces,
@@ -586,6 +587,22 @@ describe("findJiraIssueBySummary", () => {
       await findJiraIssueBySummary(creds, "ENG", "[slug] the ticket"),
     ).toEqual({ key: "ENG-2" });
   });
+
+  it("scopes the JQL to the given issue type when provided", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ issues: [] }));
+    await findJiraIssueBySummary(creds, "ENG", "my-feature", "Epic");
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init?.body as string);
+    expect(body.jql).toContain('issuetype = "Epic"');
+  });
+
+  it("omits the issue-type clause when none is given", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ issues: [] }));
+    await findJiraIssueBySummary(creds, "ENG", "[slug] the ticket");
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init?.body as string);
+    expect(body.jql).not.toContain("issuetype");
+  });
 });
 
 describe("getDefaultJiraIssueType", () => {
@@ -604,11 +621,52 @@ describe("getDefaultJiraIssueType", () => {
     });
   });
 
+  it("skips Epic even though it's a non-subtask type", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        issueTypes: [
+          { id: "12", name: "Epic", subtask: false },
+          { id: "11", name: "Task", subtask: false },
+        ],
+      }),
+    );
+    expect(await getDefaultJiraIssueType(creds, "ENG")).toEqual({
+      id: "11",
+      name: "Task",
+    });
+  });
+
   it("throws when the project has no non-subtask issue types", async () => {
     fetchMock.mockResolvedValue(jsonResponse({ issueTypes: [] }));
     await expect(getDefaultJiraIssueType(creds, "ENG")).rejects.toThrow(
       AtlassianApiError,
     );
+  });
+});
+
+describe("getJiraIssueTypeByName", () => {
+  it("finds an issue type by exact name", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        issueTypes: [
+          { id: "11", name: "Task", subtask: false },
+          { id: "12", name: "Epic", subtask: false },
+        ],
+      }),
+    );
+    expect(await getJiraIssueTypeByName(creds, "ENG", "Epic")).toEqual({
+      id: "12",
+      name: "Epic",
+    });
+  });
+
+  it("throws when no issue type matches the name", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ issueTypes: [{ id: "11", name: "Task", subtask: false }] }),
+    );
+    await expect(
+      getJiraIssueTypeByName(creds, "ENG", "Epic"),
+    ).rejects.toThrow(/no "Epic" issue type/i);
   });
 });
 
@@ -634,6 +692,25 @@ describe("createJiraIssue", () => {
     const body = JSON.parse(init?.body as string);
     expect(body.fields.issuetype).toEqual({ id: "11" });
     expect(body.fields.description.type).toBe("doc");
+    expect(body.fields.parent).toBeUndefined();
+  });
+
+  it("sets the parent field when parentKey is given, and skips the default-issue-type lookup when issueTypeId is given", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ key: "ENG-6" }));
+
+    await createJiraIssue(creds, {
+      projectKey: "ENG",
+      summary: "[slug] child ticket",
+      description: "body",
+      issueTypeId: "11",
+      parentKey: "ENG-1",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init?.body as string);
+    expect(body.fields.issuetype).toEqual({ id: "11" });
+    expect(body.fields.parent).toEqual({ key: "ENG-1" });
   });
 
   it("splits the description into ADF paragraphs and hardBreaks instead of one flat text node", async () => {
@@ -721,9 +798,11 @@ describe("upsertJiraIssue", () => {
       .mockResolvedValueOnce(jsonResponse({}));
 
     const result = await upsertJiraIssue(creds, {
+      kind: "task",
       projectKey: "ENG",
       summary: "[slug] second ticket",
       description: "Blocked by: 01-foo",
+      epicKey: "ENG-1",
       blockedByKey: "ENG-4",
     });
 
@@ -732,6 +811,9 @@ describe("upsertJiraIssue", () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
     const [linkUrl] = fetchMock.mock.calls[3];
     expect(linkUrl).toContain("/rest/api/3/issueLink");
+    const [, createInit] = fetchMock.mock.calls[2];
+    const createBody = JSON.parse(createInit?.body as string);
+    expect(createBody.fields.parent).toEqual({ key: "ENG-1" });
   });
 
   it("updates in place when a matching summary already exists, without linking when no blockedByKey", async () => {
@@ -744,8 +826,69 @@ describe("upsertJiraIssue", () => {
       .mockResolvedValueOnce(jsonResponse({}));
 
     const result = await upsertJiraIssue(creds, {
+      kind: "task",
       projectKey: "ENG",
       summary: "[slug] second ticket",
+      description: "revised",
+      epicKey: "ENG-1",
+    });
+
+    expect(result.action).toBe("updated");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("upsertJiraIssue (epic)", () => {
+  it("scopes the create-vs-update search to issuetype = Epic, and resolves the Epic type by name on create", async () => {
+    fetchMock
+      // search -> no match
+      .mockResolvedValueOnce(jsonResponse({ issues: [] }))
+      // issue-type-by-name lookup
+      .mockResolvedValueOnce(
+        jsonResponse({
+          issueTypes: [
+            { id: "10", name: "Task", subtask: false },
+            { id: "12", name: "Epic", subtask: false },
+          ],
+        }),
+      )
+      // create
+      .mockResolvedValueOnce(jsonResponse({ key: "ENG-1" }));
+
+    const result = await upsertJiraIssue(creds, {
+      kind: "epic",
+      projectKey: "ENG",
+      summary: "my-feature",
+      description: "Spec: https://acme.atlassian.net/wiki/spaces/ENG/x",
+    });
+
+    expect(result.action).toBe("created");
+    expect(result.key).toBe("ENG-1");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const [searchUrl] = fetchMock.mock.calls[0];
+    expect(searchUrl).toBe("https://acme.atlassian.net/rest/api/3/search/jql");
+    const [, searchInit] = fetchMock.mock.calls[0];
+    const searchBody = JSON.parse(searchInit?.body as string);
+    expect(searchBody.jql).toContain('issuetype = "Epic"');
+    const [, createInit] = fetchMock.mock.calls[2];
+    const createBody = JSON.parse(createInit?.body as string);
+    expect(createBody.fields.issuetype).toEqual({ id: "12" });
+    expect(createBody.fields.parent).toBeUndefined();
+  });
+
+  it("updates in place without touching issue type or parent when a matching Epic already exists", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          issues: [{ key: "ENG-1", fields: { summary: "my-feature" } }],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+
+    const result = await upsertJiraIssue(creds, {
+      kind: "epic",
+      projectKey: "ENG",
+      summary: "my-feature",
       description: "revised",
     });
 

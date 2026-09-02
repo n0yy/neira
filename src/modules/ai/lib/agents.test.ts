@@ -39,12 +39,15 @@ describe("BUILTIN_AGENTS", () => {
     expect(brainstorm?.instructions).not.toContain("docs/adr/");
   });
 
-  it("Brainstorm publishes specs/ADRs to Confluence and tickets to Jira, never falling back to a local file", () => {
+  it("Brainstorm publishes specs/ADRs to Confluence and an Epic + tickets to Jira, never falling back to a local file", () => {
     const brainstorm = BUILTIN_AGENTS.find((a) => a.id === "builtin:brainstorm");
     expect(brainstorm?.instructions).toContain("push_confluence");
     expect(brainstorm?.instructions).toContain("push_jira");
     expect(brainstorm?.instructions).toContain('kind: "spec"');
     expect(brainstorm?.instructions).toContain('kind: "adr"');
+    expect(brainstorm?.instructions).toContain('kind: "epic"');
+    expect(brainstorm?.instructions).toContain('kind: "task"');
+    expect(brainstorm?.instructions).toContain("epicKey");
     expect(brainstorm?.instructions).toContain("blockedByKey");
     expect(brainstorm?.instructions).toContain("do not fall back to a local file");
   });
