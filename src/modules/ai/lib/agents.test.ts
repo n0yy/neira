@@ -49,6 +49,13 @@ describe("BUILTIN_AGENTS", () => {
     expect(brainstorm?.instructions).toContain('kind: "task"');
     expect(brainstorm?.instructions).toContain("epicKey");
     expect(brainstorm?.instructions).toContain("blockedByKey");
+    // ADR pushes come before the Spec push, so the Spec can link each ADR's
+    // returned url instead of just naming it.
+    const adrIndex = brainstorm?.instructions.indexOf('kind: "adr"') ?? -1;
+    const specIndex = brainstorm?.instructions.indexOf('kind: "spec"') ?? -1;
+    expect(adrIndex).toBeGreaterThan(-1);
+    expect(adrIndex).toBeLessThan(specIndex);
+    expect(brainstorm?.instructions).toContain("link each ADR's");
     expect(brainstorm?.instructions).toContain("do not fall back to a local file");
   });
 
