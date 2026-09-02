@@ -11,11 +11,8 @@ import {
   endpointIdFromCompatModel,
   getModelContextLimit,
   isCompatModelId,
-  LMSTUDIO_DEFAULT_BASE_URL,
   MAX_AGENT_STEPS,
-  MLX_DEFAULT_BASE_URL,
   modelKeepsReasoning,
-  OLLAMA_DEFAULT_BASE_URL,
   providerNeedsKey,
   resolveModel,
   selectSystemPrompt,
@@ -31,7 +28,6 @@ import {
   buildReasoningRequestFields,
   isReasoningConfigUsable,
   resolveActiveReasoningLevel,
-  type ReasoningConfig,
   type ReasoningRequestFields,
 } from "./reasoningEffort";
 
@@ -72,9 +68,6 @@ function ellipsize(s: string, max: number): string {
 
 export type BuildModelOptions = {
   modelIdOverride?: string;
-  lmstudioBaseURL?: string;
-  mlxBaseURL?: string;
-  ollamaBaseURL?: string;
   openaiCompatibleBaseURL?: string;
 };
 
@@ -93,159 +86,35 @@ export async function buildLanguageModel(
     );
   }
   const key = keys[provider] ?? "";
-  const lmstudioURL = options.lmstudioBaseURL ?? LMSTUDIO_DEFAULT_BASE_URL;
-  const mlxURL = options.mlxBaseURL ?? MLX_DEFAULT_BASE_URL;
-  const ollamaURL = options.ollamaBaseURL ?? OLLAMA_DEFAULT_BASE_URL;
   const compatURL = options.openaiCompatibleBaseURL ?? "";
   const epKey = customEndpointKey ?? "";
-  const cacheKey = `${provider} ${key} ${epKey} ${resolvedModelId} ${lmstudioURL} ${mlxURL} ${ollamaURL} ${compatURL}`;
+  const cacheKey = `${provider} ${key} ${epKey} ${resolvedModelId} ${compatURL}`;
   const hit = modelCache.get(cacheKey);
   if (hit) return hit;
 
-  let built: LanguageModel;
-  switch (provider) {
-    case "openai": {
-      const { createOpenAI } = await import("@ai-sdk/openai");
-      built = createOpenAI({ apiKey: key })(resolvedModelId);
-      break;
-    }
-    case "anthropic": {
-      const { createAnthropic } = await import("@ai-sdk/anthropic");
-      built = createAnthropic({ apiKey: key })(resolvedModelId);
-      break;
-    }
-    case "google": {
-      const { createGoogleGenerativeAI } = await import("@ai-sdk/google");
-      built = createGoogleGenerativeAI({ apiKey: key })(resolvedModelId);
-      break;
-    }
-    case "xai": {
-      const { createXai } = await import("@ai-sdk/xai");
-      built = createXai({ apiKey: key })(resolvedModelId);
-      break;
-    }
-    case "cerebras": {
-      const { createCerebras } = await import("@ai-sdk/cerebras");
-      built = createCerebras({ apiKey: key })(resolvedModelId);
-      break;
-    }
-    case "deepseek": {
-      const { createOpenAICompatible } =
-        await import("@ai-sdk/openai-compatible");
-      built = createOpenAICompatible({
-        name: "deepseek",
-        baseURL: "https://api.deepseek.com",
-        apiKey: key,
-        includeUsage: true,
-      })(resolvedModelId);
-      break;
-    }
-    case "mistral": {
-      const { createOpenAICompatible } =
-        await import("@ai-sdk/openai-compatible");
-      built = createOpenAICompatible({
-        name: "mistral",
-        baseURL: "https://api.mistral.ai/v1",
-        apiKey: key,
-        includeUsage: true,
-      })(resolvedModelId);
-      break;
-    }
-    case "groq": {
-      const { createGroq } = await import("@ai-sdk/groq");
-      built = createGroq({ apiKey: key })(resolvedModelId);
-      break;
-    }
-    case "openrouter": {
-      const { createOpenAICompatible } =
-        await import("@ai-sdk/openai-compatible");
-      built = createOpenAICompatible({
-        name: "openrouter",
-        baseURL: "https://openrouter.ai/api/v1",
-        apiKey: key,
-        headers: {
-          "HTTP-Referer": "https://neira.ai",
-          "X-Title": "Neira",
-        },
-        includeUsage: true,
-      })(resolvedModelId);
-      break;
-    }
-    case "openai-compatible": {
-      if (!compatURL) {
-        throw new Error(
-          "OpenAI-compatible provider has no base URL. Set it in Settings → Models.",
-        );
-      }
-      const { createOpenAICompatible } =
-        await import("@ai-sdk/openai-compatible");
-      built = createOpenAICompatible({
-        name: "openai-compatible",
-        baseURL: compatURL,
-        apiKey: epKey || key || undefined,
-        fetch: localProxyFetch,
-        includeUsage: true,
-      })(resolvedModelId);
-      break;
-    }
-    case "lmstudio": {
-      const { createOpenAICompatible } =
-        await import("@ai-sdk/openai-compatible");
-      built = createOpenAICompatible({
-        name: "lmstudio",
-        baseURL: lmstudioURL,
-        fetch: localProxyFetch,
-        includeUsage: true,
-      })(resolvedModelId);
-      break;
-    }
-    case "mlx": {
-      const { createOpenAICompatible } =
-        await import("@ai-sdk/openai-compatible");
-      built = createOpenAICompatible({
-        name: "mlx",
-        baseURL: mlxURL,
-        fetch: localProxyFetch,
-        includeUsage: true,
-      })(resolvedModelId);
-      break;
-    }
-    case "ollama": {
-      const { createOpenAICompatible } =
-        await import("@ai-sdk/openai-compatible");
-      built = createOpenAICompatible({
-        name: "ollama",
-        baseURL: ollamaURL,
-        fetch: localProxyFetch,
-        includeUsage: true,
-      })(resolvedModelId);
-      break;
-    }
-    default: {
-      const _exhaustive: never = provider;
-      throw new Error(`Unsupported provider: ${_exhaustive as ProviderId}`);
-    }
+  if (!compatURL) {
+    throw new Error(
+      "OpenAI-compatible provider has no base URL. Set it in Settings → Models.",
+    );
   }
+  const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
+  const built = createOpenAICompatible({
+    name: "openai-compatible",
+    baseURL: compatURL,
+    apiKey: epKey || key || undefined,
+    fetch: localProxyFetch,
+    includeUsage: true,
+  })(resolvedModelId);
+
   modelCache.set(cacheKey, built);
   return built;
 }
 
 export type LocalProviderConfig = {
-  lmstudioBaseURL?: string;
-  lmstudioModelId?: string;
-  mlxBaseURL?: string;
-  mlxModelId?: string;
-  ollamaBaseURL?: string;
-  ollamaModelId?: string;
   openaiCompatibleBaseURL?: string;
   openaiCompatibleModelId?: string;
-  openrouterModelId?: string;
   customEndpoints?: readonly CustomEndpoint[];
   customEndpointKeys?: CustomEndpointKeys;
-  lmstudioReasoning?: ReasoningConfig | null;
-  mlxReasoning?: ReasoningConfig | null;
-  ollamaReasoning?: ReasoningConfig | null;
-  openrouterReasoning?: ReasoningConfig | null;
 };
 
 export function buildConfiguredLanguageModel(
@@ -271,96 +140,36 @@ export function buildConfiguredLanguageModel(
     );
   }
   const m = resolveModel(modelId);
-  let resolvedId: string = m.id;
-  if (m.id === "lmstudio-local") {
-    if (!local.lmstudioModelId?.trim()) {
-      throw new Error(
-        "LM Studio: no model id set. Open Settings → Models and enter the model id loaded in LM Studio.",
-      );
-    }
-    resolvedId = local.lmstudioModelId.trim();
-  } else if (m.id === "mlx-local") {
-    if (!local.mlxModelId?.trim()) {
-      throw new Error(
-        "MLX: no model id set. Open Settings → Models and enter the model id served by mlx_lm.server.",
-      );
-    }
-    resolvedId = local.mlxModelId.trim();
-  } else if (m.id === "ollama-local") {
-    if (!local.ollamaModelId?.trim()) {
-      throw new Error(
-        "Ollama: no model id set. Open Settings → Models and enter the model id (e.g. the name from `ollama list`).",
-      );
-    }
-    resolvedId = local.ollamaModelId.trim();
-  } else if (m.id === "openai-compatible-custom") {
-    if (!local.openaiCompatibleModelId?.trim()) {
-      throw new Error(
-        "OpenAI-compatible: no model id set. Open Settings → Models.",
-      );
-    }
-    resolvedId = local.openaiCompatibleModelId.trim();
-  } else if (m.id === "openrouter-custom") {
-    if (!local.openrouterModelId?.trim()) {
-      throw new Error(
-        "OpenRouter: no model id set. Open Settings → Models and enter an OpenRouter model id (e.g. anthropic/claude-sonnet-5).",
-      );
-    }
-    resolvedId = local.openrouterModelId.trim();
+  if (!local.openaiCompatibleModelId?.trim()) {
+    throw new Error(
+      "OpenAI-compatible: no model id set. Open Settings → Models.",
+    );
   }
-  return buildLanguageModel(m.provider, keys, resolvedId, {
-    lmstudioBaseURL: local.lmstudioBaseURL,
-    mlxBaseURL: local.mlxBaseURL,
-    ollamaBaseURL: local.ollamaBaseURL,
-    openaiCompatibleBaseURL: local.openaiCompatibleBaseURL,
-  });
+  return buildLanguageModel(
+    m.provider,
+    keys,
+    local.openaiCompatibleModelId.trim(),
+    { openaiCompatibleBaseURL: local.openaiCompatibleBaseURL },
+  );
 }
 
 /**
- * Reasoning-effort providerOptions for the freeform/self-hosted providers
- * (custom named endpoints, LM Studio, MLX, Ollama, OpenRouter), the only
- * ones with per-model reasoning config (see reasoningEffort.ts). Curated
- * cloud models never get an entry here; returns undefined for them.
+ * Reasoning-effort providerOptions for the freeform/self-hosted named custom
+ * endpoints, the only place with per-model reasoning config (see
+ * reasoningEffort.ts). Returns undefined when there's no usable config.
  */
 export function resolveReasoningProviderOptions(
   modelId: string,
   local: LocalProviderConfig,
 ): Record<string, ReasoningRequestFields> | undefined {
-  let cfg: ReasoningConfig | null | undefined;
-  let providerKey: string;
-
-  if (isCompatModelId(modelId)) {
-    const eid = endpointIdFromCompatModel(modelId);
-    const ep = local.customEndpoints?.find((e) => e.id === eid);
-    cfg = ep?.reasoning;
-    providerKey = "openai-compatible";
-  } else {
-    const m = resolveModel(modelId);
-    switch (m.id) {
-      case "lmstudio-local":
-        cfg = local.lmstudioReasoning;
-        providerKey = "lmstudio";
-        break;
-      case "mlx-local":
-        cfg = local.mlxReasoning;
-        providerKey = "mlx";
-        break;
-      case "ollama-local":
-        cfg = local.ollamaReasoning;
-        providerKey = "ollama";
-        break;
-      case "openrouter-custom":
-        cfg = local.openrouterReasoning;
-        providerKey = "openrouter";
-        break;
-      default:
-        return undefined;
-    }
-  }
+  if (!isCompatModelId(modelId)) return undefined;
+  const eid = endpointIdFromCompatModel(modelId);
+  const ep = local.customEndpoints?.find((e) => e.id === eid);
+  const cfg = ep?.reasoning;
 
   if (!isReasoningConfigUsable(cfg)) return undefined;
   const level = resolveActiveReasoningLevel(cfg);
-  return { [providerKey]: buildReasoningRequestFields(cfg.shape, level) };
+  return { "openai-compatible": buildReasoningRequestFields(cfg.shape, level) };
 }
 
 function buildStableSystem(
@@ -410,22 +219,11 @@ export type RunAgentOptions = {
   onUsage?: (delta: AgentUsageDelta) => void;
   onCompact?: (info: { droppedCount: number }) => void;
   onFinishMeta?: (info: { hitStepCap: boolean; finishReason: string }) => void;
-  lmstudioBaseURL?: string;
-  lmstudioModelId?: string;
-  mlxBaseURL?: string;
-  mlxModelId?: string;
-  ollamaBaseURL?: string;
-  ollamaModelId?: string;
   openaiCompatibleBaseURL?: string;
   openaiCompatibleModelId?: string;
   openaiCompatibleContextLimit?: number;
-  openrouterModelId?: string;
   customEndpoints?: readonly CustomEndpoint[];
   customEndpointKeys?: CustomEndpointKeys;
-  lmstudioReasoning?: ReasoningConfig | null;
-  mlxReasoning?: ReasoningConfig | null;
-  ollamaReasoning?: ReasoningConfig | null;
-  openrouterReasoning?: ReasoningConfig | null;
   projectMemory?: string | null;
   uiMessages: UIMessage[];
   abortSignal?: AbortSignal;
@@ -434,21 +232,10 @@ export type RunAgentOptions = {
 export async function runAgentStream(opts: RunAgentOptions) {
   const modelId = opts.modelId ?? DEFAULT_MODEL_ID;
   const localConfig: LocalProviderConfig = {
-    lmstudioBaseURL: opts.lmstudioBaseURL,
-    lmstudioModelId: opts.lmstudioModelId,
-    mlxBaseURL: opts.mlxBaseURL,
-    mlxModelId: opts.mlxModelId,
-    ollamaBaseURL: opts.ollamaBaseURL,
-    ollamaModelId: opts.ollamaModelId,
     openaiCompatibleBaseURL: opts.openaiCompatibleBaseURL,
     openaiCompatibleModelId: opts.openaiCompatibleModelId,
-    openrouterModelId: opts.openrouterModelId,
     customEndpoints: opts.customEndpoints,
     customEndpointKeys: opts.customEndpointKeys,
-    lmstudioReasoning: opts.lmstudioReasoning,
-    mlxReasoning: opts.mlxReasoning,
-    ollamaReasoning: opts.ollamaReasoning,
-    openrouterReasoning: opts.openrouterReasoning,
   };
   const model = await buildConfiguredLanguageModel(
     modelId,
@@ -461,7 +248,6 @@ export async function runAgentStream(opts: RunAgentOptions) {
   );
   const endpoints = opts.customEndpoints ?? [];
   const info = resolveModel(modelId, endpoints);
-  const provider = info.provider;
 
   const stableSystem = buildStableSystem(
     modelId,
@@ -490,7 +276,7 @@ export async function runAgentStream(opts: RunAgentOptions) {
     opts.onCompact?.({ droppedCount: compact.droppedCount });
   }
 
-  const prompt = prepareAgentPrompt(stableSystem, compactedHistory, provider);
+  const prompt = prepareAgentPrompt(stableSystem, compactedHistory);
 
   let stepsSeen = 0;
   return streamText({

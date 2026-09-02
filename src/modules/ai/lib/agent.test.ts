@@ -7,7 +7,7 @@ vi.mock("@ai-sdk/openai-compatible", () => ({
 }));
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CustomEndpoint, ProviderId } from "../config";
+import type { CustomEndpoint } from "../config";
 import {
   buildLanguageModel,
   resolveReasoningProviderOptions,
@@ -26,89 +26,60 @@ function reasoning(overrides: Partial<ReasoningConfig> = {}): ReasoningConfig {
   };
 }
 
-describe("buildLanguageModel: openai-compatible-routed providers", () => {
+describe("buildLanguageModel: openai-compatible", () => {
   beforeEach(() => {
     createOpenAICompatibleMock.mockClear();
   });
 
-  // Bug: none of these passed `includeUsage: true`, so `stream_options.
+  // Bug: this used to not pass `includeUsage: true`, so `stream_options.
   // include_usage` was never sent, and the server never returns a `usage`
   // object during streaming (confirmed live against a self-hosted
   // OpenAI-compatible endpoint: step.usage came back completely empty,
   // inputTokens/outputTokens both undefined, until this flag was added).
-  // ContextIndicator then silently fell back to a rough char/4 estimate
-  // for the whole session, which is why "thinking" tokens looked uncounted:
-  // the real bug was ALL usage tracking for these 7 providers, not
-  // reasoning specifically.
-  const cases: { provider: ProviderId; extra?: Record<string, unknown> }[] = [
-    { provider: "deepseek" },
-    { provider: "mistral" },
-    { provider: "openrouter" },
-    { provider: "openai-compatible", extra: { openaiCompatibleBaseURL: "http://x/v1" } },
-    { provider: "lmstudio" },
-    { provider: "mlx" },
-    { provider: "ollama" },
-  ];
-
-  for (const { provider, extra } of cases) {
-    it(`passes includeUsage: true for ${provider}`, async () => {
-      const keys = { [provider]: "test-key" } as never;
-      await buildLanguageModel(provider, keys, `model-${provider}`, extra);
-      expect(createOpenAICompatibleMock).toHaveBeenCalledWith(
-        expect.objectContaining({ includeUsage: true }),
-      );
+  it("passes includeUsage: true", async () => {
+    const keys = { "openai-compatible": "test-key" } as never;
+    await buildLanguageModel("openai-compatible", keys, "model-x", {
+      openaiCompatibleBaseURL: "http://x/v1",
     });
-  }
+    expect(createOpenAICompatibleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ includeUsage: true }),
+    );
+  });
+
+  it("throws when no base URL is configured", async () => {
+    const keys = { "openai-compatible": "test-key" } as never;
+    await expect(
+      buildLanguageModel("openai-compatible", keys, "model-x", {}),
+    ).rejects.toThrow(/base URL/);
+  });
 });
 
 describe("resolveReasoningProviderOptions", () => {
-  it("returns undefined for a curated cloud model id", () => {
+  it("returns undefined for a static model id (no reasoning config there)", () => {
     expect(
-      resolveReasoningProviderOptions("claude-sonnet-5", {}),
+      resolveReasoningProviderOptions("openai-compatible-custom", {}),
     ).toBeUndefined();
   });
 
-  it("returns undefined when the matching local config has no reasoning set", () => {
+  it("returns undefined when the compat model id references an unknown endpoint", () => {
     expect(
-      resolveReasoningProviderOptions("lmstudio-local", {}),
+      resolveReasoningProviderOptions("compat-missing", { customEndpoints: [] }),
     ).toBeUndefined();
   });
 
   it("returns undefined when reasoning is configured but disabled", () => {
-    const local: LocalProviderConfig = {
-      lmstudioReasoning: reasoning({ enabled: false }),
+    const endpoint: CustomEndpoint = {
+      id: "ep1",
+      name: "DGX Spark",
+      baseURL: "http://localhost:8080/v1",
+      modelId: "qwen3.8-flash-next",
+      contextLimit: 262_000,
+      reasoning: reasoning({ enabled: false }),
     };
+    const local: LocalProviderConfig = { customEndpoints: [endpoint] };
     expect(
-      resolveReasoningProviderOptions("lmstudio-local", local),
+      resolveReasoningProviderOptions("compat-ep1", local),
     ).toBeUndefined();
-  });
-
-  it("builds flat providerOptions for lmstudio-local, keyed by the lmstudio provider name", () => {
-    const local: LocalProviderConfig = {
-      lmstudioReasoning: reasoning({ activeLevel: "low" }),
-    };
-    expect(resolveReasoningProviderOptions("lmstudio-local", local)).toEqual({
-      lmstudio: { reasoning_effort: "low" },
-    });
-  });
-
-  it("builds providerOptions for mlx-local, ollama-local, and openrouter-custom", () => {
-    const local: LocalProviderConfig = {
-      mlxReasoning: reasoning({ activeLevel: "medium" }),
-      ollamaReasoning: reasoning({ activeLevel: "medium" }),
-      openrouterReasoning: reasoning({ shape: "openrouter", activeLevel: "medium" }),
-    };
-    expect(resolveReasoningProviderOptions("mlx-local", local)).toEqual({
-      mlx: { reasoning_effort: "medium" },
-    });
-    expect(resolveReasoningProviderOptions("ollama-local", local)).toEqual({
-      ollama: { reasoning_effort: "medium" },
-    });
-    expect(
-      resolveReasoningProviderOptions("openrouter-custom", local),
-    ).toEqual({
-      openrouter: { reasoning: { effort: "medium" } },
-    });
   });
 
   it("resolves a named custom endpoint's reasoning config via its compat model id", () => {
@@ -131,22 +102,22 @@ describe("resolveReasoningProviderOptions", () => {
     });
   });
 
-  it("returns undefined when the compat model id references an unknown endpoint", () => {
-    expect(
-      resolveReasoningProviderOptions("compat-missing", { customEndpoints: [] }),
-    ).toBeUndefined();
-  });
-
   it("defaults to the configured defaultLevel when no active level has been picked yet", () => {
-    const local: LocalProviderConfig = {
-      openrouterReasoning: reasoning({
+    const endpoint: CustomEndpoint = {
+      id: "ep1",
+      name: "DGX Spark",
+      baseURL: "http://localhost:8080/v1",
+      modelId: "qwen3.8-flash-next",
+      contextLimit: 262_000,
+      reasoning: reasoning({
         shape: "openrouter",
         defaultLevel: "medium",
         activeLevel: "",
       }),
     };
-    expect(
-      resolveReasoningProviderOptions("openrouter-custom", local),
-    ).toEqual({ openrouter: { reasoning: { effort: "medium" } } });
+    const local: LocalProviderConfig = { customEndpoints: [endpoint] };
+    expect(resolveReasoningProviderOptions("compat-ep1", local)).toEqual({
+      "openai-compatible": { reasoning: { effort: "medium" } },
+    });
   });
 });

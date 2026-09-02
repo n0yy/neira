@@ -27,12 +27,6 @@ export function useAiBootstrap(): {
   const setSelectedModelId = useChatStore((s) => s.setSelectedModelId);
   const hydrateSessions = useChatStore((s) => s.hydrateSessions);
 
-  const lmstudioModelId = usePreferencesStore((s) => s.lmstudioModelId);
-  const lmstudioBaseURL = usePreferencesStore((s) => s.lmstudioBaseURL);
-  const mlxModelId = usePreferencesStore((s) => s.mlxModelId);
-  const mlxBaseURL = usePreferencesStore((s) => s.mlxBaseURL);
-  const ollamaModelId = usePreferencesStore((s) => s.ollamaModelId);
-  const ollamaBaseURL = usePreferencesStore((s) => s.ollamaBaseURL);
   const openaiCompatibleModelId = usePreferencesStore(
     (s) => s.openaiCompatibleModelId,
   );
@@ -41,9 +35,6 @@ export function useAiBootstrap(): {
   );
   const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
   const hasLocalModel =
-    (lmstudioBaseURL.trim().length > 0 && lmstudioModelId.trim().length > 0) ||
-    (mlxBaseURL.trim().length > 0 && mlxModelId.trim().length > 0) ||
-    (ollamaBaseURL.trim().length > 0 && ollamaModelId.trim().length > 0) ||
     (openaiCompatibleBaseURL.trim().length > 0 &&
       openaiCompatibleModelId.trim().length > 0) ||
     customEndpoints.some(

@@ -144,8 +144,7 @@ export async function runSubagent({
   }
 
   // Resolve the SAME model the parent agent is using — including custom
-  // OpenAI-compatible endpoints ("compat-<id>"), local providers (LM
-  // Studio/MLX/Ollama), and OpenRouter overrides. `getModel()` only knows
+  // OpenAI-compatible endpoints ("compat-<id>"). `getModel()` only knows
   // the static catalog, so it threw "Unknown model" for anything else;
   // `buildConfiguredLanguageModel` is the same resolver the main chat loop
   // uses (see `runAgentStream` in lib/agent.ts).

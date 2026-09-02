@@ -135,8 +135,10 @@ describe("runSubagent", () => {
     const r = await runSubagent({
       type: "explore",
       prompt: "find foo",
-      keys: { openai: "test-key" } as never,
-      modelId: "gpt-5.6",
+      keys: { "openai-compatible": "test-key" } as never,
+      modelId: "openai-compatible-custom",
+      openaiCompatibleBaseURL: "http://localhost:1234/v1",
+      openaiCompatibleModelId: "test-model",
       toolContext: makeContext(),
     } as never);
 
@@ -172,8 +174,10 @@ describe("runSubagent", () => {
     const r = await runSubagent({
       type: "explore",
       prompt: "read a huge file",
-      keys: { openai: "test-key" } as never,
-      modelId: "gpt-5.6",
+      keys: { "openai-compatible": "test-key" } as never,
+      modelId: "openai-compatible-custom",
+      openaiCompatibleBaseURL: "http://localhost:1234/v1",
+      openaiCompatibleModelId: "test-model",
       toolContext: makeContext(),
     } as never);
 
@@ -201,8 +205,10 @@ describe("runSubagent", () => {
     const r = await runSubagent({
       type: "explore",
       prompt: "find foo",
-      keys: { openai: "test-key" } as never,
-      modelId: "gpt-5.6",
+      keys: { "openai-compatible": "test-key" } as never,
+      modelId: "openai-compatible-custom",
+      openaiCompatibleBaseURL: "http://localhost:1234/v1",
+      openaiCompatibleModelId: "test-model",
       toolContext: makeContext(),
     } as never);
 
@@ -235,8 +241,10 @@ describe("runSubagent", () => {
     const r = await runSubagent({
       type: "explore",
       prompt: "search two ways",
-      keys: { openai: "test-key" } as never,
-      modelId: "gpt-5.6",
+      keys: { "openai-compatible": "test-key" } as never,
+      modelId: "openai-compatible-custom",
+      openaiCompatibleBaseURL: "http://localhost:1234/v1",
+      openaiCompatibleModelId: "test-model",
       toolContext: makeContext(),
     } as never);
 
@@ -269,8 +277,10 @@ describe("runSubagent", () => {
     const r = await runSubagent({
       type: "explore",
       prompt: "find the login flow",
-      keys: { openai: "test-key" } as never,
-      modelId: "gpt-5.6",
+      keys: { "openai-compatible": "test-key" } as never,
+      modelId: "openai-compatible-custom",
+      openaiCompatibleBaseURL: "http://localhost:1234/v1",
+      openaiCompatibleModelId: "test-model",
       toolContext: makeContext(),
     } as never);
 
@@ -317,8 +327,10 @@ describe("runSubagent", () => {
     const r = await runSubagent({
       type: "explore",
       prompt: "find the login flow",
-      keys: { openai: "test-key" } as never,
-      modelId: "gpt-5.6",
+      keys: { "openai-compatible": "test-key" } as never,
+      modelId: "openai-compatible-custom",
+      openaiCompatibleBaseURL: "http://localhost:1234/v1",
+      openaiCompatibleModelId: "test-model",
       toolContext: makeContext(),
     } as never);
 
@@ -357,8 +369,10 @@ describe("runSubagent", () => {
     const r = await runSubagent({
       type: "explore",
       prompt: "search then read",
-      keys: { openai: "test-key" } as never,
-      modelId: "gpt-5.6",
+      keys: { "openai-compatible": "test-key" } as never,
+      modelId: "openai-compatible-custom",
+      openaiCompatibleBaseURL: "http://localhost:1234/v1",
+      openaiCompatibleModelId: "test-model",
       toolContext: makeContext(),
       onStepTrace: (step: SubagentStep) => seen.push(step),
     } as never);

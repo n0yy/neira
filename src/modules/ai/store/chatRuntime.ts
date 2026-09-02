@@ -55,27 +55,14 @@ function makeChat(sessionId: string): Chat<UIMessage> {
         activeFile: live.getActiveFile(),
       };
     },
-    getLmstudioBaseURL: () => usePreferencesStore.getState().lmstudioBaseURL,
-    getLmstudioModelId: () => usePreferencesStore.getState().lmstudioModelId,
-    getMlxBaseURL: () => usePreferencesStore.getState().mlxBaseURL,
-    getMlxModelId: () => usePreferencesStore.getState().mlxModelId,
-    getOllamaBaseURL: () => usePreferencesStore.getState().ollamaBaseURL,
-    getOllamaModelId: () => usePreferencesStore.getState().ollamaModelId,
     getOpenaiCompatibleBaseURL: () =>
       usePreferencesStore.getState().openaiCompatibleBaseURL,
     getOpenaiCompatibleModelId: () =>
       usePreferencesStore.getState().openaiCompatibleModelId,
     getOpenaiCompatibleContextLimit: () =>
       usePreferencesStore.getState().openaiCompatibleContextLimit,
-    getOpenrouterModelId: () =>
-      usePreferencesStore.getState().openrouterModelId,
     getCustomEndpoints: () => usePreferencesStore.getState().customEndpoints,
     getCustomEndpointKeys: () => useChatStore.getState().customEndpointKeys,
-    getLmstudioReasoning: () => usePreferencesStore.getState().lmstudioReasoning,
-    getMlxReasoning: () => usePreferencesStore.getState().mlxReasoning,
-    getOllamaReasoning: () => usePreferencesStore.getState().ollamaReasoning,
-    getOpenrouterReasoning: () =>
-      usePreferencesStore.getState().openrouterReasoning,
     onStep: (step) => {
       useChatStore.getState().patchAgentMeta({ step });
     },

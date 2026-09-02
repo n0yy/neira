@@ -1,10 +1,9 @@
 /**
- * Per-model "reasoning effort" configuration for freeform/self-hosted
- * providers (custom OpenAI-compatible endpoints, LM Studio, MLX, Ollama,
- * OpenRouter). These providers don't share a standard way to control
- * thinking effort: each backend expects its own request-body shape, so
- * the user defines exactly which levels their model supports and how to
- * send them, rather than picking from a fixed Neira-defined vocabulary.
+ * Per-model "reasoning effort" configuration for named custom OpenAI-compatible
+ * endpoints. Self-hosted/proxied backends don't share a standard way to
+ * control thinking effort: each expects its own request-body shape, so the
+ * user defines exactly which levels their model supports and how to send
+ * them, rather than picking from a fixed Neira-defined vocabulary.
  */
 
 export type ReasoningShape = "flat" | "chat-template-kwargs" | "openrouter";

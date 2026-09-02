@@ -67,21 +67,10 @@ Auto-executes (no approval) — subagents are read-only by design.`,
             onStepTrace: (step) => appendLiveSubagentStep(toolCallId, step),
             // Same model the parent is using — see runSubagent.ts for why
             // this can't just be `getModel(modelId)`.
-            lmstudioBaseURL: prefs.lmstudioBaseURL,
-            lmstudioModelId: prefs.lmstudioModelId,
-            mlxBaseURL: prefs.mlxBaseURL,
-            mlxModelId: prefs.mlxModelId,
-            ollamaBaseURL: prefs.ollamaBaseURL,
-            ollamaModelId: prefs.ollamaModelId,
             openaiCompatibleBaseURL: prefs.openaiCompatibleBaseURL,
             openaiCompatibleModelId: prefs.openaiCompatibleModelId,
-            openrouterModelId: prefs.openrouterModelId,
             customEndpoints: prefs.customEndpoints,
             customEndpointKeys,
-            lmstudioReasoning: prefs.lmstudioReasoning,
-            mlxReasoning: prefs.mlxReasoning,
-            ollamaReasoning: prefs.ollamaReasoning,
-            openrouterReasoning: prefs.openrouterReasoning,
           });
           return {
             type,

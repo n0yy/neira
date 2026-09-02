@@ -8,7 +8,6 @@ import {
   modelKeepsReasoning,
   modelSupportsTemperature,
   modelUsesReasoningTokens,
-  MODEL_PRICING,
   resolveModel,
   type CustomEndpoint,
 } from "./config";
@@ -29,8 +28,8 @@ describe("compat model id helpers", () => {
   });
 
   it("treats static model ids as non-compat", () => {
-    expect(isCompatModelId("gpt-5.4-mini")).toBe(false);
-    expect(endpointIdFromCompatModel("gpt-5.4-mini")).toBe("");
+    expect(isCompatModelId("openai-compatible-custom")).toBe(false);
+    expect(endpointIdFromCompatModel("openai-compatible-custom")).toBe("");
   });
 });
 
@@ -48,19 +47,10 @@ describe("resolveModel", () => {
     expect(info.provider).toBe("openai-compatible");
   });
 
-  it("resolves a static model id from the registry", () => {
-    expect(resolveModel("gpt-5.4-mini").provider).toBe("openai");
-  });
-
-  it.each([
-    ["gpt-5.6", "openai"],
-    ["gpt-5.6-terra", "openai"],
-    ["gpt-5.6-luna", "openai"],
-    ["claude-fable-5", "anthropic"],
-    ["claude-sonnet-5", "anthropic"],
-    ["grok-4.5", "xai"],
-  ] as const)("resolves current model %s through %s", (modelId, provider) => {
-    expect(resolveModel(modelId).provider).toBe(provider);
+  it("resolves the static model id from the registry", () => {
+    expect(resolveModel("openai-compatible-custom").provider).toBe(
+      "openai-compatible",
+    );
   });
 
   it("throws on an unknown static model id", () => {
@@ -74,32 +64,8 @@ describe("getModelContextLimit", () => {
     expect(getModelContextLimit(mid, endpoint.contextLimit)).toBe(64_000);
   });
 
-  it("reads the static table for known models", () => {
-    expect(getModelContextLimit("claude-opus-4-7")).toBe(1_000_000);
-  });
-
-  it.each([
-    ["gpt-5.6", 1_050_000],
-    ["gpt-5.6-terra", 1_050_000],
-    ["gpt-5.6-luna", 1_050_000],
-    ["claude-fable-5", 1_000_000],
-    ["claude-sonnet-5", 1_000_000],
-    ["grok-4.5", 500_000],
-  ] as const)("uses the published context limit for %s", (modelId, limit) => {
-    expect(getModelContextLimit(modelId)).toBe(limit);
-  });
-});
-
-describe("current model pricing", () => {
-  it.each([
-    ["gpt-5.6", 5, 30, 0.5],
-    ["gpt-5.6-terra", 2.5, 15, 0.25],
-    ["gpt-5.6-luna", 1, 6, 0.1],
-    ["claude-fable-5", 10, 50, 1],
-    ["claude-sonnet-5", 3, 15, 0.3],
-    ["grok-4.5", 2, 6, 0.5],
-  ] as const)("uses the published token pricing for %s", (modelId, input, output, cacheRead) => {
-    expect(MODEL_PRICING[modelId]).toEqual({ input, output, cacheRead });
+  it("reads the static table for the known model", () => {
+    expect(getModelContextLimit("openai-compatible-custom")).toBe(128_000);
   });
 });
 
@@ -109,44 +75,30 @@ describe("modelKeepsReasoning", () => {
     expect(modelKeepsReasoning(info)).toBe(true);
   });
 
-  it("drops reasoning for plain non-reasoning models", () => {
-    expect(modelKeepsReasoning(resolveModel("gpt-5.4-mini"))).toBe(false);
-  });
-
-  it("keeps reasoning for tagged reasoning models", () => {
-    expect(modelKeepsReasoning(resolveModel("claude-opus-4-7"))).toBe(true);
+  it("keeps reasoning for the static openai-compatible model too", () => {
+    expect(modelKeepsReasoning(resolveModel("openai-compatible-custom"))).toBe(
+      true,
+    );
   });
 });
 
 describe("model sampling capabilities", () => {
-  it.each([
-    ["openai", "gpt-5.4-nano"],
-    ["openai", "gpt-5.6"],
-    ["anthropic", "claude-fable-5"],
-    ["anthropic", "claude-sonnet-5"],
-  ] as const)("omits temperature for %s/%s", (provider, modelId) => {
-    expect(modelSupportsTemperature(provider, modelId)).toBe(false);
-  });
-
-  it("keeps temperature for models that accept sampling parameters", () => {
-    expect(modelSupportsTemperature("openai", "gpt-4.1-mini")).toBe(true);
-    expect(modelSupportsTemperature("xai", "grok-4.5")).toBe(true);
-  });
-
   it("defaults unknown provider models to temperature support", () => {
     expect(modelSupportsTemperature("openai-compatible", "custom-model")).toBe(
       true,
     );
   });
 
-  it.each([
-    ["openai", "gpt-5.4-nano"],
-    ["openai", "gpt-5.6-luna"],
-    ["anthropic", "claude-sonnet-5"],
-    ["xai", "grok-4.5"],
-    ["groq", "openai/gpt-oss-20b"],
-  ] as const)("allocates a reasoning output budget for %s/%s", (provider, modelId) => {
-    expect(modelUsesReasoningTokens(provider, modelId)).toBe(true);
+  it("allocates a reasoning output budget for gpt-oss-shaped model ids", () => {
+    expect(
+      modelUsesReasoningTokens("openai-compatible", "openai/gpt-oss-20b"),
+    ).toBe(true);
+  });
+
+  it("does not allocate a reasoning output budget for an ordinary model id", () => {
+    expect(
+      modelUsesReasoningTokens("openai-compatible", "llama-3.3-70b"),
+    ).toBe(false);
   });
 });
 

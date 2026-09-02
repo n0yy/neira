@@ -376,17 +376,11 @@ export function useSourceControlPanel(
     const model = resolveModel(state.selectedModelId);
     return !providerNeedsKey(model.provider) || !!state.apiKeys[model.provider];
   });
-  const lmstudioModelId = usePreferencesStore((state) => state.lmstudioModelId);
-  const mlxModelId = usePreferencesStore((state) => state.mlxModelId);
-  const ollamaModelId = usePreferencesStore((state) => state.ollamaModelId);
   const openaiCompatibleBaseURL = usePreferencesStore(
     (state) => state.openaiCompatibleBaseURL,
   );
   const openaiCompatibleModelId = usePreferencesStore(
     (state) => state.openaiCompatibleModelId,
-  );
-  const openrouterModelId = usePreferencesStore(
-    (state) => state.openrouterModelId,
   );
   const [panelState, setPanelState] = useState<PanelState>("closed");
   const [repo, setRepo] = useState<GitRepoInfo | null>(null);
@@ -480,33 +474,17 @@ export function useSourceControlPanel(
     if (!hasApiKeyForSelected) {
       return "Connect an AI provider to generate commit messages";
     }
-    if (selectedModel.id === "lmstudio-local" && !lmstudioModelId.trim()) {
-      return "Connect an AI provider to generate commit messages";
-    }
-    if (selectedModel.id === "mlx-local" && !mlxModelId.trim()) {
-      return "Connect an AI provider to generate commit messages";
-    }
-    if (selectedModel.id === "ollama-local" && !ollamaModelId.trim()) {
-      return "Connect an AI provider to generate commit messages";
-    }
     if (
       selectedModel.id === "openai-compatible-custom" &&
       (!openaiCompatibleBaseURL.trim() || !openaiCompatibleModelId.trim())
     ) {
       return "Connect an AI provider to generate commit messages";
     }
-    if (selectedModel.id === "openrouter-custom" && !openrouterModelId.trim()) {
-      return "Connect an AI provider to generate commit messages";
-    }
     return null;
   }, [
     hasApiKeyForSelected,
-    lmstudioModelId,
-    mlxModelId,
-    ollamaModelId,
     openaiCompatibleBaseURL,
     openaiCompatibleModelId,
-    openrouterModelId,
     selectedModel,
     stagedEntries.length,
   ]);
@@ -882,15 +860,10 @@ export function useSourceControlPanel(
         selectedModelId,
         chatState.apiKeys,
         {
-          lmstudioBaseURL: prefs.lmstudioBaseURL,
-          lmstudioModelId,
-          mlxBaseURL: prefs.mlxBaseURL,
-          mlxModelId,
-          ollamaBaseURL: prefs.ollamaBaseURL,
-          ollamaModelId,
           openaiCompatibleBaseURL,
           openaiCompatibleModelId,
-          openrouterModelId,
+          customEndpoints: prefs.customEndpoints,
+          customEndpointKeys: chatState.customEndpointKeys,
         },
       );
       const result = await generateText({
@@ -926,12 +899,8 @@ export function useSourceControlPanel(
   }, [
     aiUnavailableReason,
     aiBusy,
-    lmstudioModelId,
-    mlxModelId,
-    ollamaModelId,
     openaiCompatibleBaseURL,
     openaiCompatibleModelId,
-    openrouterModelId,
     repo,
     selectedModelId,
     selectedModelSupportsTemperature,

@@ -1,7 +1,6 @@
 import {
   type AutocompleteProviderId,
   DEFAULT_AUTOCOMPLETE_MODEL,
-  LMSTUDIO_DEFAULT_BASE_URL,
   modelSupportsTemperature,
   modelUsesReasoningTokens,
 } from "@/modules/ai/config";
@@ -18,9 +17,6 @@ export type CompletionDeps = {
   provider: AutocompleteProviderId;
   modelId: string;
   apiKey: string | null;
-  lmstudioBaseURL: string;
-  mlxBaseURL?: string;
-  ollamaBaseURL?: string;
   openaiCompatibleBaseURL?: string;
 };
 
@@ -42,22 +38,10 @@ export async function requestCompletion(
   }
   const keys = { ...EMPTY_PROVIDER_KEYS, [deps.provider]: deps.apiKey };
   const model = await buildLanguageModel(deps.provider, keys, modelId, {
-    lmstudioBaseURL: deps.lmstudioBaseURL || LMSTUDIO_DEFAULT_BASE_URL,
-    mlxBaseURL: deps.mlxBaseURL,
-    ollamaBaseURL: deps.ollamaBaseURL,
     openaiCompatibleBaseURL: deps.openaiCompatibleBaseURL,
   });
 
   const isReasoning = modelUsesReasoningTokens(deps.provider, modelId);
-  const providerOptions = isReasoning
-    ? {
-        anthropic: { effort: "low" },
-        cerebras: { reasoningEffort: "low" },
-        groq: { reasoningEffort: "low" },
-        openai: { reasoningEffort: "low" },
-        xai: { reasoningEffort: "low" },
-      }
-    : undefined;
 
   const { text } = await generateText({
     model,
@@ -71,7 +55,6 @@ export async function requestCompletion(
     ...(modelSupportsTemperature(deps.provider, modelId)
       ? { temperature: 0.1 }
       : {}),
-    ...(providerOptions ? { providerOptions } : {}),
   });
 
   return cleanCompletion(text);

@@ -22,15 +22,8 @@ vi.mock("../store/chatStore", () => ({
 vi.mock("@/modules/settings/preferences", () => ({
   usePreferencesStore: {
     getState: () => ({
-      lmstudioBaseURL: "http://localhost:1234/v1",
-      lmstudioModelId: "",
-      mlxBaseURL: "http://127.0.0.1:8080/v1",
-      mlxModelId: "",
-      ollamaBaseURL: "http://localhost:11434/v1",
-      ollamaModelId: "",
       openaiCompatibleBaseURL: "",
       openaiCompatibleModelId: "",
-      openrouterModelId: "",
       customEndpoints: [
         {
           id: "db5061e3",

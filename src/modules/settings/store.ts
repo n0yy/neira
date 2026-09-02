@@ -1,17 +1,12 @@
 import {
   type AutocompleteProviderId,
   type CustomEndpoint,
-  DEFAULT_AUTOCOMPLETE_MODEL,
   DEFAULT_MODEL_ID,
   isCompatModelId,
   isKnownModelId,
-  LMSTUDIO_DEFAULT_BASE_URL,
-  MLX_DEFAULT_BASE_URL,
   migrateLegacyCompatEndpoint,
-  OLLAMA_DEFAULT_BASE_URL,
   OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
 } from "@/modules/ai/config";
-import type { ReasoningConfig } from "@/modules/ai/lib/reasoningEffort";
 import {
   type AgentLaunchCommands,
   DEFAULT_AGENT_LAUNCH_COMMANDS,
@@ -136,21 +131,10 @@ export type Preferences = {
   autocompleteTrigger: AutocompleteTrigger;
   autocompleteProvider: AutocompleteProviderId;
   autocompleteModelId: string;
-  lmstudioBaseURL: string;
-  lmstudioModelId: string;
-  mlxBaseURL: string;
-  mlxModelId: string;
-  ollamaBaseURL: string;
-  ollamaModelId: string;
   openaiCompatibleBaseURL: string;
   openaiCompatibleModelId: string;
   openaiCompatibleContextLimit: number;
   customEndpoints: CustomEndpoint[];
-  openrouterModelId: string;
-  lmstudioReasoning: ReasoningConfig | null;
-  mlxReasoning: ReasoningConfig | null;
-  ollamaReasoning: ReasoningConfig | null;
-  openrouterReasoning: ReasoningConfig | null;
   favoriteModelIds: string[];
   recentModelIds: string[];
   vimMode: boolean;
@@ -240,21 +224,10 @@ const KEY_AUTOCOMPLETE_ENABLED = "autocompleteEnabled";
 const KEY_AUTOCOMPLETE_TRIGGER = "autocompleteTrigger";
 const KEY_AUTOCOMPLETE_PROVIDER = "autocompleteProvider";
 const KEY_AUTOCOMPLETE_MODEL = "autocompleteModelId";
-const KEY_LMSTUDIO_BASE_URL = "lmstudioBaseURL";
-const KEY_LMSTUDIO_MODEL_ID = "lmstudioModelId";
-const KEY_MLX_BASE_URL = "mlxBaseURL";
-const KEY_MLX_MODEL_ID = "mlxModelId";
-const KEY_OLLAMA_BASE_URL = "ollamaBaseURL";
-const KEY_OLLAMA_MODEL_ID = "ollamaModelId";
 const KEY_OPENAI_COMPAT_BASE_URL = "openaiCompatibleBaseURL";
 const KEY_OPENAI_COMPAT_MODEL_ID = "openaiCompatibleModelId";
 const KEY_OPENAI_COMPAT_CONTEXT_LIMIT = "openaiCompatibleContextLimit";
 const KEY_CUSTOM_ENDPOINTS = "customEndpoints";
-const KEY_OPENROUTER_MODEL_ID = "openrouterModelId";
-const KEY_LMSTUDIO_REASONING = "lmstudioReasoning";
-const KEY_MLX_REASONING = "mlxReasoning";
-const KEY_OLLAMA_REASONING = "ollamaReasoning";
-const KEY_OPENROUTER_REASONING = "openrouterReasoning";
 const KEY_FAVORITE_MODELS = "favoriteModelIds";
 const KEY_RECENT_MODELS = "recentModelIds";
 const KEY_VIM_MODE = "vimMode";
@@ -338,23 +311,12 @@ export const DEFAULT_PREFERENCES: Preferences = {
   restoreWindowState: true,
   autocompleteEnabled: false,
   autocompleteTrigger: "auto",
-  autocompleteProvider: "cerebras",
-  autocompleteModelId: DEFAULT_AUTOCOMPLETE_MODEL.cerebras ?? "",
-  lmstudioBaseURL: LMSTUDIO_DEFAULT_BASE_URL,
-  lmstudioModelId: "",
-  mlxBaseURL: MLX_DEFAULT_BASE_URL,
-  mlxModelId: "",
-  ollamaBaseURL: OLLAMA_DEFAULT_BASE_URL,
-  ollamaModelId: "",
+  autocompleteProvider: "openai-compatible",
+  autocompleteModelId: "",
   openaiCompatibleBaseURL: OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
   openaiCompatibleModelId: "",
   openaiCompatibleContextLimit: 128_000,
   customEndpoints: [],
-  openrouterModelId: "",
-  lmstudioReasoning: null,
-  mlxReasoning: null,
-  ollamaReasoning: null,
-  openrouterReasoning: null,
   favoriteModelIds: [],
   recentModelIds: [],
   vimMode: false,
@@ -460,22 +422,22 @@ export async function loadPreferences(): Promise<Preferences> {
     autocompleteTrigger:
       get<AutocompleteTrigger>(KEY_AUTOCOMPLETE_TRIGGER) ??
       DEFAULT_PREFERENCES.autocompleteTrigger,
-    autocompleteProvider:
-      get<AutocompleteProviderId>(KEY_AUTOCOMPLETE_PROVIDER) ??
-      DEFAULT_PREFERENCES.autocompleteProvider,
+    // A value from before the provider removal (e.g. "cerebras") is no
+    // longer a valid AutocompleteProviderId — fall back to the default
+    // rather than carrying a dead provider (and its now-meaningless model
+    // id) forward into a throw on every completion attempt.
+    autocompleteProvider: ((): AutocompleteProviderId => {
+      const stored = get<AutocompleteProviderId>(KEY_AUTOCOMPLETE_PROVIDER);
+      return stored === "openai-compatible"
+        ? stored
+        : DEFAULT_PREFERENCES.autocompleteProvider;
+    })(),
     autocompleteModelId:
-      get<string>(KEY_AUTOCOMPLETE_MODEL) ??
-      DEFAULT_PREFERENCES.autocompleteModelId,
-    lmstudioBaseURL:
-      get<string>(KEY_LMSTUDIO_BASE_URL) ?? DEFAULT_PREFERENCES.lmstudioBaseURL,
-    lmstudioModelId:
-      get<string>(KEY_LMSTUDIO_MODEL_ID) ?? DEFAULT_PREFERENCES.lmstudioModelId,
-    mlxBaseURL: get<string>(KEY_MLX_BASE_URL) ?? DEFAULT_PREFERENCES.mlxBaseURL,
-    mlxModelId: get<string>(KEY_MLX_MODEL_ID) ?? DEFAULT_PREFERENCES.mlxModelId,
-    ollamaBaseURL:
-      get<string>(KEY_OLLAMA_BASE_URL) ?? DEFAULT_PREFERENCES.ollamaBaseURL,
-    ollamaModelId:
-      get<string>(KEY_OLLAMA_MODEL_ID) ?? DEFAULT_PREFERENCES.ollamaModelId,
+      get<AutocompleteProviderId>(KEY_AUTOCOMPLETE_PROVIDER) ===
+      "openai-compatible"
+        ? (get<string>(KEY_AUTOCOMPLETE_MODEL) ??
+          DEFAULT_PREFERENCES.autocompleteModelId)
+        : DEFAULT_PREFERENCES.autocompleteModelId,
     openaiCompatibleBaseURL:
       get<string>(KEY_OPENAI_COMPAT_BASE_URL) ??
       DEFAULT_PREFERENCES.openaiCompatibleBaseURL,
@@ -495,21 +457,6 @@ export async function loadPreferences(): Promise<Preferences> {
         crypto.randomUUID().slice(0, 8),
       );
     })(),
-    openrouterModelId:
-      get<string>(KEY_OPENROUTER_MODEL_ID) ??
-      DEFAULT_PREFERENCES.openrouterModelId,
-    lmstudioReasoning:
-      get<ReasoningConfig | null>(KEY_LMSTUDIO_REASONING) ??
-      DEFAULT_PREFERENCES.lmstudioReasoning,
-    mlxReasoning:
-      get<ReasoningConfig | null>(KEY_MLX_REASONING) ??
-      DEFAULT_PREFERENCES.mlxReasoning,
-    ollamaReasoning:
-      get<ReasoningConfig | null>(KEY_OLLAMA_REASONING) ??
-      DEFAULT_PREFERENCES.ollamaReasoning,
-    openrouterReasoning:
-      get<ReasoningConfig | null>(KEY_OPENROUTER_REASONING) ??
-      DEFAULT_PREFERENCES.openrouterReasoning,
     favoriteModelIds: (
       get<string[]>(KEY_FAVORITE_MODELS) ?? DEFAULT_PREFERENCES.favoriteModelIds
     ).filter(isKnownModelId),
@@ -775,30 +722,6 @@ export async function setAutocompleteModelId(value: string): Promise<void> {
   await writePref(KEY_AUTOCOMPLETE_MODEL, value);
 }
 
-export async function setLmstudioBaseURL(value: string): Promise<void> {
-  await writePref(KEY_LMSTUDIO_BASE_URL, value);
-}
-
-export async function setLmstudioModelId(value: string): Promise<void> {
-  await writePref(KEY_LMSTUDIO_MODEL_ID, value);
-}
-
-export async function setMlxBaseURL(value: string): Promise<void> {
-  await writePref(KEY_MLX_BASE_URL, value);
-}
-
-export async function setMlxModelId(value: string): Promise<void> {
-  await writePref(KEY_MLX_MODEL_ID, value);
-}
-
-export async function setOllamaBaseURL(value: string): Promise<void> {
-  await writePref(KEY_OLLAMA_BASE_URL, value);
-}
-
-export async function setOllamaModelId(value: string): Promise<void> {
-  await writePref(KEY_OLLAMA_MODEL_ID, value);
-}
-
 export async function setOpenaiCompatibleBaseURL(value: string): Promise<void> {
   await writePref(KEY_OPENAI_COMPAT_BASE_URL, value);
 }
@@ -820,34 +743,6 @@ export async function setCustomEndpoints(
   value: CustomEndpoint[],
 ): Promise<void> {
   await writePref(KEY_CUSTOM_ENDPOINTS, value);
-}
-
-export async function setOpenrouterModelId(value: string): Promise<void> {
-  await writePref(KEY_OPENROUTER_MODEL_ID, value);
-}
-
-export async function setLmstudioReasoning(
-  value: ReasoningConfig | null,
-): Promise<void> {
-  await writePref(KEY_LMSTUDIO_REASONING, value);
-}
-
-export async function setMlxReasoning(
-  value: ReasoningConfig | null,
-): Promise<void> {
-  await writePref(KEY_MLX_REASONING, value);
-}
-
-export async function setOllamaReasoning(
-  value: ReasoningConfig | null,
-): Promise<void> {
-  await writePref(KEY_OLLAMA_REASONING, value);
-}
-
-export async function setOpenrouterReasoning(
-  value: ReasoningConfig | null,
-): Promise<void> {
-  await writePref(KEY_OPENROUTER_REASONING, value);
 }
 
 export async function setFavoriteModelIds(value: string[]): Promise<void> {
@@ -1065,21 +960,10 @@ export async function onPreferencesChange(
     [KEY_AUTOCOMPLETE_TRIGGER]: "autocompleteTrigger",
     [KEY_AUTOCOMPLETE_PROVIDER]: "autocompleteProvider",
     [KEY_AUTOCOMPLETE_MODEL]: "autocompleteModelId",
-    [KEY_LMSTUDIO_BASE_URL]: "lmstudioBaseURL",
-    [KEY_LMSTUDIO_MODEL_ID]: "lmstudioModelId",
-    [KEY_MLX_BASE_URL]: "mlxBaseURL",
-    [KEY_MLX_MODEL_ID]: "mlxModelId",
-    [KEY_OLLAMA_BASE_URL]: "ollamaBaseURL",
-    [KEY_OLLAMA_MODEL_ID]: "ollamaModelId",
     [KEY_OPENAI_COMPAT_BASE_URL]: "openaiCompatibleBaseURL",
     [KEY_OPENAI_COMPAT_MODEL_ID]: "openaiCompatibleModelId",
     [KEY_OPENAI_COMPAT_CONTEXT_LIMIT]: "openaiCompatibleContextLimit",
     [KEY_CUSTOM_ENDPOINTS]: "customEndpoints",
-    [KEY_OPENROUTER_MODEL_ID]: "openrouterModelId",
-    [KEY_LMSTUDIO_REASONING]: "lmstudioReasoning",
-    [KEY_MLX_REASONING]: "mlxReasoning",
-    [KEY_OLLAMA_REASONING]: "ollamaReasoning",
-    [KEY_OPENROUTER_REASONING]: "openrouterReasoning",
     [KEY_FAVORITE_MODELS]: "favoriteModelIds",
     [KEY_RECENT_MODELS]: "recentModelIds",
     [KEY_VIM_MODE]: "vimMode",

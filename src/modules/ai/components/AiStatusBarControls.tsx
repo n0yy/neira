@@ -14,26 +14,15 @@ import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import {
   Add01Icon,
   AiBookIcon,
-  AppleIcon,
   ArrowDown01Icon,
   ArrowUpIcon,
   BrainIcon,
-  ChatGptIcon,
-  ClaudeIcon,
   Clock01Icon,
   CoinsDollarIcon,
-  ComputerIcon,
-  CpuIcon,
-  DeepseekIcon,
   FavouriteIcon,
   FlashIcon,
-  GlobeIcon,
-  GoogleGeminiIcon,
-  Grok02Icon,
-  MistralIcon,
   Message01Icon,
   PlugIcon,
-  ServerStack01Icon,
   Search01Icon,
   Settings01Icon,
   StarIcon,
@@ -61,20 +50,8 @@ import { useChatStore } from "../store/chatStore";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 
 const PROVIDER_ICON = {
-  openai: ChatGptIcon,
-  anthropic: ClaudeIcon,
-  google: GoogleGeminiIcon,
-  xai: Grok02Icon,
-  cerebras: CpuIcon,
-  groq: FlashIcon,
-  deepseek: DeepseekIcon,
-  mistral: MistralIcon,
-  openrouter: GlobeIcon,
   "openai-compatible": PlugIcon,
-  lmstudio: ComputerIcon,
-  mlx: AppleIcon,
-  ollama: ServerStack01Icon,
-} as const satisfies Record<ProviderId, typeof ChatGptIcon>;
+} as const satisfies Record<ProviderId, typeof PlugIcon>;
 
 export function AiOpenButton({ onOpen }: { onOpen: () => void }) {
   return (

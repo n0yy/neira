@@ -4,7 +4,6 @@ import { runAgentStream, type AgentUsageDelta } from "./agent";
 import type { ProviderKeys, CustomEndpointKeys } from "./keyring";
 import { formatAiError } from "./errors";
 import { native } from "./native";
-import type { ReasoningConfig } from "./reasoningEffort";
 import type { ToolContext } from "../tools/tools";
 
 const NEIRA_MD_MAX_BYTES = 32 * 1024;
@@ -48,22 +47,11 @@ type Deps = {
   getCustomInstructions: () => string;
   getAgentPersona: () => { name: string; instructions: string } | null;
   getLive: () => LiveSnapshot;
-  getLmstudioBaseURL?: () => string | undefined;
-  getLmstudioModelId?: () => string | undefined;
-  getMlxBaseURL?: () => string | undefined;
-  getMlxModelId?: () => string | undefined;
-  getOllamaBaseURL?: () => string | undefined;
-  getOllamaModelId?: () => string | undefined;
   getOpenaiCompatibleBaseURL?: () => string | undefined;
   getOpenaiCompatibleModelId?: () => string | undefined;
   getOpenaiCompatibleContextLimit?: () => number | undefined;
-  getOpenrouterModelId?: () => string | undefined;
   getCustomEndpoints?: () => readonly CustomEndpoint[];
   getCustomEndpointKeys?: () => CustomEndpointKeys;
-  getLmstudioReasoning?: () => ReasoningConfig | null;
-  getMlxReasoning?: () => ReasoningConfig | null;
-  getOllamaReasoning?: () => ReasoningConfig | null;
-  getOpenrouterReasoning?: () => ReasoningConfig | null;
   onStep?: (step: string | null) => void;
   onUsage?: (delta: AgentUsageDelta) => void;
   onCompact?: (info: { droppedCount: number }) => void;
@@ -94,22 +82,11 @@ export function createContextAwareTransport(deps: Deps) {
       onUsage: deps.onUsage,
       onCompact: deps.onCompact,
       onFinishMeta: deps.onFinishMeta,
-      lmstudioBaseURL: deps.getLmstudioBaseURL?.(),
-      lmstudioModelId: deps.getLmstudioModelId?.(),
-      mlxBaseURL: deps.getMlxBaseURL?.(),
-      mlxModelId: deps.getMlxModelId?.(),
-      ollamaBaseURL: deps.getOllamaBaseURL?.(),
-      ollamaModelId: deps.getOllamaModelId?.(),
       openaiCompatibleBaseURL: deps.getOpenaiCompatibleBaseURL?.(),
       openaiCompatibleModelId: deps.getOpenaiCompatibleModelId?.(),
       openaiCompatibleContextLimit: deps.getOpenaiCompatibleContextLimit?.(),
-      openrouterModelId: deps.getOpenrouterModelId?.(),
       customEndpoints: deps.getCustomEndpoints?.(),
       customEndpointKeys: deps.getCustomEndpointKeys?.(),
-      lmstudioReasoning: deps.getLmstudioReasoning?.(),
-      mlxReasoning: deps.getMlxReasoning?.(),
-      ollamaReasoning: deps.getOllamaReasoning?.(),
-      openrouterReasoning: deps.getOpenrouterReasoning?.(),
       projectMemory,
       uiMessages: messagesForRun,
       abortSignal: options.abortSignal,

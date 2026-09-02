@@ -10,32 +10,13 @@ const history: ModelMessage[] = [
 
 describe("prepareAgentPrompt", () => {
   it("keeps trusted instructions outside conversation messages", () => {
-    const prompt = prepareAgentPrompt("Stable instructions", history, "openai");
+    const prompt = prepareAgentPrompt("Stable instructions", history);
 
     expect(prompt.system).toEqual([
       { role: "system", content: "Stable instructions" },
     ]);
     expect(prompt.messages).toEqual(history);
     expect(prompt.messages.every((message) => message.role !== "system")).toBe(
-      true,
-    );
-  });
-
-  it("keeps Anthropic cache markers on the stable prefix and rotating tail", () => {
-    const prompt = prepareAgentPrompt(
-      "Stable instructions",
-      history,
-      "anthropic",
-    );
-
-    expect(prompt.system[0].providerOptions).toEqual({
-      anthropic: { cacheControl: { type: "ephemeral" } },
-    });
-    expect(prompt.messages[0].providerOptions).toBeUndefined();
-    expect(prompt.messages[1].providerOptions).toEqual({
-      anthropic: { cacheControl: { type: "ephemeral" } },
-    });
-    expect(history.every((message) => message.providerOptions == null)).toBe(
       true,
     );
   });
@@ -52,7 +33,7 @@ describe("prepareAgentPrompt", () => {
         }),
       },
     });
-    const prompt = prepareAgentPrompt("Stable instructions", history, "openai");
+    const prompt = prepareAgentPrompt("Stable instructions", history);
 
     try {
       const result = streamText({

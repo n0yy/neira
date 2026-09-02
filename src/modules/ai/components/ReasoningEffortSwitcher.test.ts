@@ -68,19 +68,9 @@ describe("ReasoningEffortSwitcher: resolveTarget + persistActiveLevel", () => {
     expect(after?.cfg.activeLevel).toBe("xhigh");
   });
 
-  it("picking a different level for a local provider (lmstudio) updates its activeLevel", async () => {
+  it("returns null for a model id with no matching custom endpoint", async () => {
     await usePreferencesStore.getState().init();
-    usePreferencesStore.setState({
-      lmstudioReasoning: reasoning({ activeLevel: "low" }),
-    });
-
-    const before = resolveTarget("lmstudio-local");
-    expect(before?.cfg.activeLevel).toBe("low");
-
-    if (!before) throw new Error("expected a target");
-    await persistActiveLevel(before, "xhigh");
-
-    const after = resolveTarget("lmstudio-local");
-    expect(after?.cfg.activeLevel).toBe("xhigh");
+    usePreferencesStore.setState({ customEndpoints: [] });
+    expect(resolveTarget("openai-compatible-custom")).toBeNull();
   });
 });
