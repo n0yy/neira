@@ -13,7 +13,7 @@ An AI model vendor (OpenAI, Anthropic, etc.) configured in Settings → Models v
 _Avoid_: Integration
 
 **Agent**:
-A selectable chat persona (e.g. Coder, Architect, Impact Analysis) — a system-prompt swap applied within the same conversation loop (`streamText` in `src/modules/ai/lib/agent.ts`). No tool restriction and no context isolation: every Agent sees the same tool registry and the same message history. Independent of Permission Mode — selecting an Agent never changes the active mode.
+A selectable chat persona (e.g. Coder, Architect, Impact Analysis) — a system-prompt swap applied within the same conversation loop (`streamText` in `src/modules/ai/lib/agent.ts`). No context isolation: every Agent sees the same message history. Tool registry is shared by default (no restriction) — Brainstorm is the one exception, declaring its own whitelist so it can't call code-mutating tools (see ADR 0006). Independent of Permission Mode — selecting an Agent never changes the active mode.
 _Avoid_: Persona, Mode, Variant
 
 **Permission Mode**:
@@ -34,3 +34,11 @@ _Avoid_: Transcript (reserved for the raw message history a Subagent explicitly 
 
 **Explorer**:
 A Subagent whose whitelisted tools only read from one external Integration (e.g. `github-explorer`, `atlassian-explorer`) and report findings back — never mutates anything.
+
+**Artifact**:
+A spec, ADR, or ticket produced by the Brainstorm agent's interview. Never written to disk — pushed directly to Confluence (spec/ADR) or Jira (ticket) as the sole record. `NEIRA.md` is the only thing Brainstorm still writes locally.
+_Avoid_: Document, Deliverable
+
+**Publish**:
+The `push_confluence`/`push_jira` tools' create-or-update of an Artifact against a real Confluence page or Jira issue. Unlike an Explorer, these are ordinary Agent tools gated by `needsApproval`, not context-isolated Subagents. Create-vs-update is decided by searching Atlassian for the Artifact's predictable title, not by storing a page-ID/issue-key mapping (see ADR 0006).
+_Avoid_: Push alone (name the tool, `push_confluence`/`push_jira`, when precision matters), Sync (implies two-way, this is one-way)
