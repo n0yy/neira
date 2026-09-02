@@ -225,6 +225,23 @@ function stripHighlightMarkers(text: string): string {
   return text.replace(/@@@(?:end)?hl@@@/g, "");
 }
 
+/**
+ * Converts plain text into Confluence storage-format XHTML: blank-line
+ * blocks become `<p>` paragraphs, single newlines within a block become
+ * `<br/>`, and `& < >` are escaped. `push_confluence`'s `content` input is
+ * always plain text (never storage format), so every write goes through
+ * this — unescaped `&`/`<`/`>` would otherwise make Confluence reject the
+ * request as malformed XHTML.
+ */
+export function plainTextToConfluenceStorage(text: string): string {
+  const escape = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return text
+    .split(/\n{2,}/)
+    .map((block) => `<p>${escape(block).replace(/\n/g, "<br/>")}</p>`)
+    .join("");
+}
+
 export type JiraIssueHit = {
   key: string;
   summary: string;
@@ -381,4 +398,320 @@ export async function getConfluencePage(
     content: clipText(stripStorageFormat(data.body?.storage?.value ?? "")),
     url: `https://${site}/wiki${data._links?.webui ?? ""}`,
   };
+}
+
+export type ConfluenceWriteResult = { id: string; url: string };
+
+function confluenceWriteResultFrom(
+  creds: AtlassianCredentials,
+  data: { id: string; _links?: { webui?: string } },
+): ConfluenceWriteResult {
+  const site = normalizeAtlassianSite(creds.site);
+  return { id: data.id, url: `https://${site}/wiki${data._links?.webui ?? ""}` };
+}
+
+/**
+ * Finds a Confluence page by its exact title within one space, via CQL
+ * (`title = "..." AND type = page`) — the same read-only `searchCql` the
+ * explorer tools use, reused here so create-vs-update never needs a
+ * separately stored id/mapping (see ADR 0006).
+ */
+export async function findConfluencePageByTitle(
+  creds: AtlassianCredentials,
+  spaceKey: string,
+  title: string,
+): Promise<{ id: string } | null> {
+  const cql = `title = "${title.replace(/"/g, '\\"')}" AND type = page`;
+  const hits = await searchCql(creds, cql, [spaceKey]);
+  const exact = hits.find((h) => h.title === title);
+  return exact ? { id: exact.id } : null;
+}
+
+/** Creates a new Confluence page. `parentId`, when given, nests it under that page. */
+export async function createConfluencePage(
+  creds: AtlassianCredentials,
+  params: {
+    spaceKey: string;
+    title: string;
+    content: string;
+    parentId?: string;
+  },
+): Promise<ConfluenceWriteResult> {
+  const res = await atlassianFetch(creds, "/wiki/rest/api/content", {
+    method: "POST",
+    body: JSON.stringify({
+      type: "page",
+      title: params.title,
+      space: { key: params.spaceKey },
+      ...(params.parentId ? { ancestors: [{ id: params.parentId }] } : {}),
+      body: { storage: { value: params.content, representation: "storage" } },
+    }),
+  });
+  requireOk(res);
+  const data = (await res.json()) as { id: string; _links?: { webui?: string } };
+  return confluenceWriteResultFrom(creds, data);
+}
+
+/** Updates an existing Confluence page's title/content, bumping its version number. */
+export async function updateConfluencePage(
+  creds: AtlassianCredentials,
+  params: { id: string; title: string; content: string },
+): Promise<ConfluenceWriteResult> {
+  const metaRes = await atlassianFetch(
+    creds,
+    `/wiki/rest/api/content/${encodeURIComponent(params.id)}?expand=version`,
+  );
+  requireOk(metaRes);
+  const meta = (await metaRes.json()) as { version: { number: number } };
+
+  const res = await atlassianFetch(
+    creds,
+    `/wiki/rest/api/content/${encodeURIComponent(params.id)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        id: params.id,
+        type: "page",
+        title: params.title,
+        version: { number: meta.version.number + 1 },
+        body: { storage: { value: params.content, representation: "storage" } },
+      }),
+    },
+  );
+  requireOk(res);
+  const data = (await res.json()) as { id: string; _links?: { webui?: string } };
+  return confluenceWriteResultFrom(creds, data);
+}
+
+export type JiraWriteResult = { key: string; url: string };
+
+function jiraWriteResultFrom(
+  creds: AtlassianCredentials,
+  key: string,
+): JiraWriteResult {
+  const site = normalizeAtlassianSite(creds.site);
+  return { key, url: `https://${site}/browse/${key}` };
+}
+
+/**
+ * Converts plain text into an ADF (Atlassian Document Format) doc: blank-line
+ * blocks become paragraphs, single newlines within a block become
+ * `hardBreak` nodes. ADF has no implicit line-break semantics — a bare `\n`
+ * inside one text node renders as a space, not a break — so a multi-section
+ * Jira description (Brainstorm's `**What to build:**` / `**Status:**` /
+ * checklist layout) needs this instead of one flat text node.
+ */
+function adfFromText(text: string): unknown {
+  const paragraphs = text.split(/\n{2,}/).map((block) => {
+    const lines = block.split("\n");
+    const content: unknown[] = [];
+    lines.forEach((line, i) => {
+      if (i > 0) content.push({ type: "hardBreak" });
+      if (line) content.push({ type: "text", text: line });
+    });
+    return { type: "paragraph", content };
+  });
+  return { type: "doc", version: 1, content: paragraphs };
+}
+
+/** Finds a Jira issue by its exact summary within one project, via the existing read-only `searchJql`. */
+export async function findJiraIssueBySummary(
+  creds: AtlassianCredentials,
+  projectKey: string,
+  summary: string,
+): Promise<{ key: string } | null> {
+  const jql = `summary ~ "${summary.replace(/"/g, '\\"')}"`;
+  const hits = await searchJql(creds, jql, [projectKey]);
+  const exact = hits.find((h) => h.summary === summary);
+  return exact ? { key: exact.key } : null;
+}
+
+/** The project's first non-subtask issue type — used as the "default" type for created issues (not configurable in v1). */
+export async function getDefaultJiraIssueType(
+  creds: AtlassianCredentials,
+  projectKey: string,
+): Promise<{ id: string; name: string }> {
+  const res = await atlassianFetch(
+    creds,
+    `/rest/api/3/project/${encodeURIComponent(projectKey)}`,
+  );
+  requireOk(res);
+  const data = (await res.json()) as {
+    issueTypes?: Array<{ id: string; name: string; subtask: boolean }>;
+  };
+  const type = (data.issueTypes ?? []).find((t) => !t.subtask);
+  if (!type) {
+    throw new AtlassianApiError(
+      `Project ${projectKey} has no non-subtask issue types.`,
+    );
+  }
+  return { id: type.id, name: type.name };
+}
+
+/** Creates a new Jira issue using the project's default issue type. */
+export async function createJiraIssue(
+  creds: AtlassianCredentials,
+  params: { projectKey: string; summary: string; description: string },
+): Promise<JiraWriteResult> {
+  const issueType = await getDefaultJiraIssueType(creds, params.projectKey);
+  const res = await atlassianFetch(creds, "/rest/api/3/issue", {
+    method: "POST",
+    body: JSON.stringify({
+      fields: {
+        project: { key: params.projectKey },
+        summary: params.summary,
+        issuetype: { id: issueType.id },
+        description: adfFromText(params.description),
+      },
+    }),
+  });
+  requireOk(res);
+  const data = (await res.json()) as { key: string };
+  return jiraWriteResultFrom(creds, data.key);
+}
+
+/** Updates an existing Jira issue's summary/description. */
+export async function updateJiraIssue(
+  creds: AtlassianCredentials,
+  params: { key: string; summary: string; description: string },
+): Promise<JiraWriteResult> {
+  const res = await atlassianFetch(
+    creds,
+    `/rest/api/3/issue/${encodeURIComponent(params.key)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        fields: {
+          summary: params.summary,
+          description: adfFromText(params.description),
+        },
+      }),
+    },
+  );
+  requireOk(res);
+  return jiraWriteResultFrom(creds, params.key);
+}
+
+/** Links `blockedKey` as "is blocked by" `blockerKey`, via Jira's native "Blocks" issue-link type. */
+export async function createJiraBlockedByLink(
+  creds: AtlassianCredentials,
+  params: { blockedKey: string; blockerKey: string },
+): Promise<void> {
+  const res = await atlassianFetch(creds, "/rest/api/3/issueLink", {
+    method: "POST",
+    body: JSON.stringify({
+      type: { name: "Blocks" },
+      inwardIssue: { key: params.blockedKey },
+      outwardIssue: { key: params.blockerKey },
+    }),
+  });
+  requireOk(res);
+}
+
+export type JiraTicketArtifact = {
+  projectKey: string;
+  summary: string;
+  description: string;
+  /** Issue key of a previously-pushed blocking ticket, if any. */
+  blockedByKey?: string;
+};
+
+/**
+ * Creates or updates a Jira issue for a ticket Artifact, deciding which by
+ * searching for the issue's predictable summary first — see
+ * `findJiraIssueBySummary`. No issue-key mapping is stored anywhere else.
+ */
+export async function upsertJiraIssue(
+  creds: AtlassianCredentials,
+  params: JiraTicketArtifact,
+): Promise<JiraWriteResult & { action: "created" | "updated" }> {
+  const existing = await findJiraIssueBySummary(
+    creds,
+    params.projectKey,
+    params.summary,
+  );
+  const result = existing
+    ? {
+        ...(await updateJiraIssue(creds, {
+          key: existing.key,
+          summary: params.summary,
+          description: params.description,
+        })),
+        action: "updated" as const,
+      }
+    : {
+        ...(await createJiraIssue(creds, {
+          projectKey: params.projectKey,
+          summary: params.summary,
+          description: params.description,
+        })),
+        action: "created" as const,
+      };
+  if (params.blockedByKey) {
+    await createJiraBlockedByLink(creds, {
+      blockedKey: result.key,
+      blockerKey: params.blockedByKey,
+    });
+  }
+  return result;
+}
+
+/** Gets the id of the "Specs" or "ADRs" parent page in a space, creating it (empty) if missing. */
+export async function getOrCreateConfluenceParentPage(
+  creds: AtlassianCredentials,
+  spaceKey: string,
+  name: "Specs" | "ADRs",
+): Promise<string> {
+  const existing = await findConfluencePageByTitle(creds, spaceKey, name);
+  if (existing) return existing.id;
+  const created = await createConfluencePage(creds, {
+    spaceKey,
+    title: name,
+    content: "",
+  });
+  return created.id;
+}
+
+export type ConfluenceArtifactKind = "spec" | "adr";
+
+/**
+ * Creates or updates a Confluence page for a spec/ADR Artifact, deciding
+ * which by searching for the page's predictable title first — see
+ * `findConfluencePageByTitle`. No page-id mapping is stored anywhere else.
+ */
+export async function upsertConfluencePage(
+  creds: AtlassianCredentials,
+  params: {
+    spaceKey: string;
+    kind: ConfluenceArtifactKind;
+    title: string;
+    content: string;
+  },
+): Promise<ConfluenceWriteResult & { action: "created" | "updated" }> {
+  const parentName = params.kind === "spec" ? "Specs" : "ADRs";
+  const existing = await findConfluencePageByTitle(
+    creds,
+    params.spaceKey,
+    params.title,
+  );
+  if (existing) {
+    const updated = await updateConfluencePage(creds, {
+      id: existing.id,
+      title: params.title,
+      content: params.content,
+    });
+    return { ...updated, action: "updated" };
+  }
+  const parentId = await getOrCreateConfluenceParentPage(
+    creds,
+    params.spaceKey,
+    parentName,
+  );
+  const created = await createConfluencePage(creds, {
+    spaceKey: params.spaceKey,
+    title: params.title,
+    content: params.content,
+    parentId,
+  });
+  return { ...created, action: "created" };
 }

@@ -1,3 +1,4 @@
+import { buildAtlassianPublishTools } from "./atlassianPublish";
 import { buildEditTools } from "./edit";
 import { buildFsTools } from "./fs";
 import { buildSearchTools } from "./search";
@@ -16,7 +17,7 @@ export { resolvePath, type ToolContext } from "./context";
  *    auto-execute, but go through the security guard which refuses obvious
  *    secret paths (.env*, .ssh/, credentials, etc.).
  *  - Mutating tools (`write_file`, `edit`, `multi_edit`, `create_directory`,
- *    `bash_run`, `bash_background`) require explicit user approval — the
+ *    `bash_run`, `bash_background`, `push_confluence`, `push_jira`) require explicit user approval — the
  *    AI SDK pauses on tool-call and
  *    surfaces a `tool-approval-request` part that the UI renders as a
  *    confirmation card. Which modes skip that card is decided per-tool by
@@ -45,7 +46,19 @@ export function buildTools(ctx: import("./context").ToolContext) {
     ...buildSubagentTools(ctx),
     ...buildTerminalTools(ctx),
     ...buildTodoTools(ctx),
+    ...buildAtlassianPublishTools(ctx),
   };
+
+  // Agent-scoped restriction (e.g. Brainstorm's `allowedTools`, see ADR 0006)
+  // omits everything outside the whitelist from the registry entirely, same
+  // enforcement style as the Plan mode omission below.
+  const allowedTools = ctx.getAgentAllowedTools?.();
+  if (allowedTools) {
+    const allowed = new Set(allowedTools);
+    for (const name of Object.keys(tools)) {
+      if (!allowed.has(name)) delete (tools as Record<string, unknown>)[name];
+    }
+  }
 
   if (ctx.getPermissionMode() === "plan") {
     for (const [name, t] of Object.entries(tools)) {

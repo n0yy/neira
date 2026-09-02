@@ -5,7 +5,7 @@ import {
 } from "ai";
 import { getModel, providerNeedsKey, type ModelId } from "../config";
 import { usePreferencesStore } from "@/modules/settings/preferences";
-import { BUILTIN_AGENTS } from "../lib/agents";
+import { BUILTIN_AGENTS, findAgent } from "../lib/agents";
 import { useAgentsStore } from "./agentsStore";
 import { usePermissionModeStore } from "./permissionModeStore";
 import { createContextAwareTransport } from "../lib/transport";
@@ -17,6 +17,11 @@ import {
   touchChat,
   useChatStore,
 } from "./chatStore";
+
+function getActiveAgent() {
+  const { activeId, customAgents } = useAgentsStore.getState();
+  return findAgent([...BUILTIN_AGENTS, ...customAgents], activeId);
+}
 
 function makeChat(sessionId: string): Chat<UIMessage> {
   const readCache = new Map<string, { size: number; hash: number }>();
@@ -32,6 +37,7 @@ function makeChat(sessionId: string): Chat<UIMessage> {
     readCache,
     getSessionId: () => sessionId,
     getPermissionMode: () => usePermissionModeStore.getState().mode,
+    getAgentAllowedTools: () => getActiveAgent().allowedTools,
   };
 
   const transport = createContextAwareTransport({
@@ -41,9 +47,7 @@ function makeChat(sessionId: string): Chat<UIMessage> {
     getCustomInstructions: () =>
       usePreferencesStore.getState().customInstructions,
     getAgentPersona: () => {
-      const { activeId, customAgents } = useAgentsStore.getState();
-      const all = [...BUILTIN_AGENTS, ...customAgents];
-      const a = all.find((x) => x.id === activeId) ?? BUILTIN_AGENTS[0];
+      const a = getActiveAgent();
       return { name: a.name, instructions: a.instructions };
     },
     getLive: () => {

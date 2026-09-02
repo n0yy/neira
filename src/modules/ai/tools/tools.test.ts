@@ -3,7 +3,10 @@ import type { PermissionMode } from "../lib/permissionMode";
 import { buildTools } from "./tools";
 import type { ToolContext } from "./context";
 
-function makeContext(mode: PermissionMode): ToolContext {
+function makeContext(
+  mode: PermissionMode,
+  allowedTools?: readonly string[],
+): ToolContext {
   return {
     getCwd: () => "/workspace",
     getWorkspaceRoot: () => "/workspace",
@@ -14,6 +17,7 @@ function makeContext(mode: PermissionMode): ToolContext {
     readCache: new Map(),
     getSessionId: () => "session",
     getPermissionMode: () => mode,
+    getAgentAllowedTools: () => allowedTools,
   } as unknown as ToolContext;
 }
 
@@ -42,6 +46,16 @@ describe("buildTools outside Plan mode", () => {
     const manualTools = buildTools(makeContext("manual"));
     expect(manualTools).toHaveProperty("write_file");
   });
+
+  it("omits push_confluence/push_jira under Plan mode, since they declare needsApproval", () => {
+    const planTools = buildTools(makeContext("plan"));
+    expect(planTools).not.toHaveProperty("push_confluence");
+    expect(planTools).not.toHaveProperty("push_jira");
+
+    const manualTools = buildTools(makeContext("manual"));
+    expect(manualTools).toHaveProperty("push_confluence");
+    expect(manualTools).toHaveProperty("push_jira");
+  });
 });
 
 describe("buildTools Plan omission is self-deriving", () => {
@@ -58,5 +72,30 @@ describe("buildTools Plan omission is self-deriving", () => {
       .sort();
 
     expect(missingUnderPlan).toEqual(declaredApproval);
+  });
+});
+
+describe("buildTools agent whitelist", () => {
+  it("is unrestricted when the context declares no whitelist (regression)", () => {
+    const tools = buildTools(makeContext("manual"));
+    expect(tools).toHaveProperty("bash_run");
+    expect(tools).toHaveProperty("write_file");
+  });
+
+  it("filters the registry to exactly the declared whitelist", () => {
+    const tools = buildTools(
+      makeContext("manual", ["read_file", "grep", "write_file"]),
+    );
+    expect(Object.keys(tools).sort()).toEqual(
+      ["grep", "read_file", "write_file"].sort(),
+    );
+  });
+
+  it("applies before the Plan-mode omission, so a whitelisted mutating tool is still gone under Plan", () => {
+    const tools = buildTools(
+      makeContext("plan", ["read_file", "write_file"]),
+    );
+    expect(tools).toHaveProperty("read_file");
+    expect(tools).not.toHaveProperty("write_file");
   });
 });

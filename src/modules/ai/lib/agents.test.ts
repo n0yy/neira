@@ -29,14 +29,41 @@ describe("BUILTIN_AGENTS", () => {
     expect(impactAnalysis?.instructions).toContain("run_subagent");
   });
 
-  it("Brainstorm never writes code and stays local", () => {
+  it("Brainstorm never writes code and only writes NEIRA.md locally", () => {
     const brainstorm = BUILTIN_AGENTS.find((a) => a.id === "builtin:brainstorm");
     expect(brainstorm).toBeDefined();
     expect(brainstorm?.instructions).toContain("never write or edit code");
     expect(brainstorm?.instructions).toContain("refuse");
     expect(brainstorm?.instructions).toContain("NEIRA.md");
-    expect(brainstorm?.instructions).toContain(".scratch/");
-    expect(brainstorm?.instructions).toContain("never publish it to any tracker");
+    expect(brainstorm?.instructions).not.toContain(".scratch/");
+    expect(brainstorm?.instructions).not.toContain("docs/adr/");
+  });
+
+  it("Brainstorm publishes specs/ADRs to Confluence and tickets to Jira, never falling back to a local file", () => {
+    const brainstorm = BUILTIN_AGENTS.find((a) => a.id === "builtin:brainstorm");
+    expect(brainstorm?.instructions).toContain("push_confluence");
+    expect(brainstorm?.instructions).toContain("push_jira");
+    expect(brainstorm?.instructions).toContain('kind: "spec"');
+    expect(brainstorm?.instructions).toContain('kind: "adr"');
+    expect(brainstorm?.instructions).toContain("blockedByKey");
+    expect(brainstorm?.instructions).toContain("do not fall back to a local file");
+  });
+
+  it("Brainstorm is the only built-in agent with a declared tool whitelist, including the two push tools", () => {
+    const brainstorm = BUILTIN_AGENTS.find((a) => a.id === "builtin:brainstorm");
+    expect(brainstorm?.allowedTools).toEqual([
+      "read_file",
+      "list_directory",
+      "grep",
+      "glob",
+      "write_file",
+      "edit",
+      "run_subagent",
+      "push_confluence",
+      "push_jira",
+    ]);
+    const others = BUILTIN_AGENTS.filter((a) => a.id !== "builtin:brainstorm");
+    expect(others.every((a) => a.allowedTools === undefined)).toBe(true);
   });
 });
 

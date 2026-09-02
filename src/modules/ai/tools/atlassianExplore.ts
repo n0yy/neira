@@ -22,7 +22,8 @@ type AtlassianScope = {
 const NOT_CONNECTED_ERROR =
   "Atlassian is not connected. Connect it in Settings → Integrations.";
 
-async function loadAtlassianScope(): Promise<
+/** Shared by `atlassianPublish.ts` — loading credentials + selected-project/space scope is identical for read and write tools. */
+export async function loadAtlassianScope(): Promise<
   { ok: true; scope: AtlassianScope } | { ok: false; error: string }
 > {
   const token = await getAtlassianToken();

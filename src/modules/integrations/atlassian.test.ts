@@ -7,14 +7,26 @@ vi.mock("@/modules/ai/lib/proxyFetch", () => ({
 import { proxyFetch } from "@/modules/ai/lib/proxyFetch";
 import {
   AtlassianApiError,
+  createConfluencePage,
+  createJiraBlockedByLink,
+  createJiraIssue,
   filterAtlassianItems,
+  findConfluencePageByTitle,
+  findJiraIssueBySummary,
   getConfluencePage,
+  getDefaultJiraIssueType,
+  getOrCreateConfluenceParentPage,
   getJiraIssue,
   listConfluenceSpaces,
   listJiraProjects,
   normalizeAtlassianSite,
+  plainTextToConfluenceStorage,
   searchCql,
   searchJql,
+  updateConfluencePage,
+  updateJiraIssue,
+  upsertConfluencePage,
+  upsertJiraIssue,
   validateAtlassianCredentials,
 } from "./atlassian";
 
@@ -364,5 +376,380 @@ describe("filterAtlassianItems", () => {
 
   it("returns nothing when no item matches", () => {
     expect(filterAtlassianItems(items, "nope")).toEqual([]);
+  });
+});
+
+describe("plainTextToConfluenceStorage", () => {
+  it("wraps a single block in one <p>, escaping & < >", () => {
+    expect(plainTextToConfluenceStorage("A & B < C > D")).toBe(
+      "<p>A &amp; B &lt; C &gt; D</p>",
+    );
+  });
+
+  it("splits blank-line-separated blocks into separate paragraphs", () => {
+    expect(plainTextToConfluenceStorage("First\n\nSecond")).toBe(
+      "<p>First</p><p>Second</p>",
+    );
+  });
+
+  it("converts a single newline within a block to <br/>", () => {
+    expect(plainTextToConfluenceStorage("line one\nline two")).toBe(
+      "<p>line one<br/>line two</p>",
+    );
+  });
+});
+
+describe("findConfluencePageByTitle", () => {
+  it("returns null when the search has no exact-title match", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ results: [] }));
+    expect(await findConfluencePageByTitle(creds, "ENG", "Specs")).toBeNull();
+  });
+
+  it("returns null when a hit's title only partially matches", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        results: [
+          { content: { id: "1", title: "Specs Archive" }, url: "/x" },
+        ],
+      }),
+    );
+    expect(await findConfluencePageByTitle(creds, "ENG", "Specs")).toBeNull();
+  });
+
+  it("returns the id of the exact-title match", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        results: [{ content: { id: "42", title: "Specs" }, url: "/x" }],
+      }),
+    );
+    expect(await findConfluencePageByTitle(creds, "ENG", "Specs")).toEqual({
+      id: "42",
+    });
+  });
+});
+
+describe("createConfluencePage", () => {
+  it("POSTs to /wiki/rest/api/content with an ancestors entry when parentId is given", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ id: "99", _links: { webui: "/spaces/ENG/pages/99" } }),
+    );
+
+    const result = await createConfluencePage(creds, {
+      spaceKey: "ENG",
+      title: "my-feature",
+      content: "<p>hi</p>",
+      parentId: "10",
+    });
+
+    expect(result).toEqual({
+      id: "99",
+      url: "https://acme.atlassian.net/wiki/spaces/ENG/pages/99",
+    });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain("/wiki/rest/api/content");
+    expect(init?.method).toBe("POST");
+    const body = JSON.parse(init?.body as string);
+    expect(body.ancestors).toEqual([{ id: "10" }]);
+    expect(body.space).toEqual({ key: "ENG" });
+  });
+
+  it("omits ancestors when no parentId is given", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ id: "99", _links: {} }));
+    await createConfluencePage(creds, {
+      spaceKey: "ENG",
+      title: "Specs",
+      content: "",
+    });
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init?.body as string);
+    expect(body.ancestors).toBeUndefined();
+  });
+});
+
+describe("updateConfluencePage", () => {
+  it("fetches the current version, then PUTs with version + 1", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ version: { number: 3 } }))
+      .mockResolvedValueOnce(
+        jsonResponse({ id: "99", _links: { webui: "/spaces/ENG/pages/99" } }),
+      );
+
+    const result = await updateConfluencePage(creds, {
+      id: "99",
+      title: "my-feature",
+      content: "<p>updated</p>",
+    });
+
+    expect(result).toEqual({
+      id: "99",
+      url: "https://acme.atlassian.net/wiki/spaces/ENG/pages/99",
+    });
+    const [, putInit] = fetchMock.mock.calls[1];
+    expect(putInit?.method).toBe("PUT");
+    const body = JSON.parse(putInit?.body as string);
+    expect(body.version).toEqual({ number: 4 });
+  });
+});
+
+describe("getOrCreateConfluenceParentPage", () => {
+  it("reuses the existing parent page when one is found", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        results: [{ content: { id: "7", title: "Specs" }, url: "/x" }],
+      }),
+    );
+    const id = await getOrCreateConfluenceParentPage(creds, "ENG", "Specs");
+    expect(id).toBe("7");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates the parent page when none is found", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ results: [] }))
+      .mockResolvedValueOnce(jsonResponse({ id: "8", _links: {} }));
+    const id = await getOrCreateConfluenceParentPage(creds, "ENG", "ADRs");
+    expect(id).toBe("8");
+    const [, createInit] = fetchMock.mock.calls[1];
+    expect(createInit?.method).toBe("POST");
+  });
+});
+
+describe("upsertConfluencePage", () => {
+  it("updates in place when a page with the exact title already exists", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          results: [{ content: { id: "42", title: "my-feature" }, url: "/x" }],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ version: { number: 1 } }))
+      .mockResolvedValueOnce(jsonResponse({ id: "42", _links: {} }));
+
+    const result = await upsertConfluencePage(creds, {
+      spaceKey: "ENG",
+      kind: "spec",
+      title: "my-feature",
+      content: "<p>hi</p>",
+    });
+
+    expect(result.action).toBe("updated");
+    expect(result.id).toBe("42");
+  });
+
+  it("creates under the Specs/ADRs parent page when no existing page matches", async () => {
+    fetchMock
+      // search for the artifact's own title -> no match
+      .mockResolvedValueOnce(jsonResponse({ results: [] }))
+      // search for the "Specs" parent -> no match
+      .mockResolvedValueOnce(jsonResponse({ results: [] }))
+      // create the "Specs" parent
+      .mockResolvedValueOnce(jsonResponse({ id: "10", _links: {} }))
+      // create the artifact page itself
+      .mockResolvedValueOnce(jsonResponse({ id: "11", _links: {} }));
+
+    const result = await upsertConfluencePage(creds, {
+      spaceKey: "ENG",
+      kind: "spec",
+      title: "my-feature",
+      content: "<p>hi</p>",
+    });
+
+    expect(result.action).toBe("created");
+    expect(result.id).toBe("11");
+    const [, createInit] = fetchMock.mock.calls[3];
+    const body = JSON.parse(createInit?.body as string);
+    expect(body.ancestors).toEqual([{ id: "10" }]);
+  });
+});
+
+describe("findJiraIssueBySummary", () => {
+  it("returns null when no hit has an exact summary match", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        issues: [{ key: "ENG-1", fields: { summary: "not it" } }],
+      }),
+    );
+    expect(
+      await findJiraIssueBySummary(creds, "ENG", "[slug] the ticket"),
+    ).toBeNull();
+  });
+
+  it("returns the key of the exact-summary match", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        issues: [
+          { key: "ENG-2", fields: { summary: "[slug] the ticket" } },
+        ],
+      }),
+    );
+    expect(
+      await findJiraIssueBySummary(creds, "ENG", "[slug] the ticket"),
+    ).toEqual({ key: "ENG-2" });
+  });
+});
+
+describe("getDefaultJiraIssueType", () => {
+  it("picks the first non-subtask issue type", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        issueTypes: [
+          { id: "10", name: "Subtask", subtask: true },
+          { id: "11", name: "Task", subtask: false },
+        ],
+      }),
+    );
+    expect(await getDefaultJiraIssueType(creds, "ENG")).toEqual({
+      id: "11",
+      name: "Task",
+    });
+  });
+
+  it("throws when the project has no non-subtask issue types", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ issueTypes: [] }));
+    await expect(getDefaultJiraIssueType(creds, "ENG")).rejects.toThrow(
+      AtlassianApiError,
+    );
+  });
+});
+
+describe("createJiraIssue", () => {
+  it("resolves the default issue type, then POSTs the issue with an ADF description", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({ issueTypes: [{ id: "11", name: "Task", subtask: false }] }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ key: "ENG-3" }));
+
+    const result = await createJiraIssue(creds, {
+      projectKey: "ENG",
+      summary: "[slug] the ticket",
+      description: "Blocked by: 01-foo",
+    });
+
+    expect(result).toEqual({
+      key: "ENG-3",
+      url: "https://acme.atlassian.net/browse/ENG-3",
+    });
+    const [, init] = fetchMock.mock.calls[1];
+    const body = JSON.parse(init?.body as string);
+    expect(body.fields.issuetype).toEqual({ id: "11" });
+    expect(body.fields.description.type).toBe("doc");
+  });
+
+  it("splits the description into ADF paragraphs and hardBreaks instead of one flat text node", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({ issueTypes: [{ id: "11", name: "Task", subtask: false }] }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ key: "ENG-3" }));
+
+    await createJiraIssue(creds, {
+      projectKey: "ENG",
+      summary: "[slug] the ticket",
+      description: "**What to build:** line one\nline two\n\n**Status:** draft",
+    });
+
+    const [, init] = fetchMock.mock.calls[1];
+    const body = JSON.parse(init?.body as string);
+    expect(body.fields.description).toEqual({
+      type: "doc",
+      version: 1,
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "**What to build:** line one" },
+            { type: "hardBreak" },
+            { type: "text", text: "line two" },
+          ],
+        },
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "**Status:** draft" }],
+        },
+      ],
+    });
+  });
+});
+
+describe("updateJiraIssue", () => {
+  it("PUTs the summary/description without a preceding GET", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}));
+    const result = await updateJiraIssue(creds, {
+      key: "ENG-3",
+      summary: "[slug] the ticket (revised)",
+      description: "updated body",
+    });
+    expect(result).toEqual({
+      key: "ENG-3",
+      url: "https://acme.atlassian.net/browse/ENG-3",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init?.method).toBe("PUT");
+  });
+});
+
+describe("createJiraBlockedByLink", () => {
+  it("POSTs a Blocks-type link with the blocked issue inward", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}));
+    await createJiraBlockedByLink(creds, {
+      blockedKey: "ENG-4",
+      blockerKey: "ENG-3",
+    });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain("/rest/api/3/issueLink");
+    const body = JSON.parse(init?.body as string);
+    expect(body.type).toEqual({ name: "Blocks" });
+    expect(body.inwardIssue).toEqual({ key: "ENG-4" });
+    expect(body.outwardIssue).toEqual({ key: "ENG-3" });
+  });
+});
+
+describe("upsertJiraIssue", () => {
+  it("creates a new issue and links it when blockedByKey is given", async () => {
+    fetchMock
+      // search -> no match
+      .mockResolvedValueOnce(jsonResponse({ issues: [] }))
+      // default issue type
+      .mockResolvedValueOnce(
+        jsonResponse({ issueTypes: [{ id: "11", name: "Task", subtask: false }] }),
+      )
+      // create
+      .mockResolvedValueOnce(jsonResponse({ key: "ENG-5" }))
+      // link
+      .mockResolvedValueOnce(jsonResponse({}));
+
+    const result = await upsertJiraIssue(creds, {
+      projectKey: "ENG",
+      summary: "[slug] second ticket",
+      description: "Blocked by: 01-foo",
+      blockedByKey: "ENG-4",
+    });
+
+    expect(result.action).toBe("created");
+    expect(result.key).toBe("ENG-5");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    const [linkUrl] = fetchMock.mock.calls[3];
+    expect(linkUrl).toContain("/rest/api/3/issueLink");
+  });
+
+  it("updates in place when a matching summary already exists, without linking when no blockedByKey", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          issues: [{ key: "ENG-5", fields: { summary: "[slug] second ticket" } }],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+
+    const result = await upsertJiraIssue(creds, {
+      projectKey: "ENG",
+      summary: "[slug] second ticket",
+      description: "revised",
+    });
+
+    expect(result.action).toBe("updated");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
