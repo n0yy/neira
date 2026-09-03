@@ -29,9 +29,7 @@ const GITHUB_EXPLORE_TOOLS = [
 
 const ATLASSIAN_EXPLORE_TOOLS = [
   "atlassian_search_jql",
-  "atlassian_search_cql",
-  "atlassian_get_jira_issue",
-  "atlassian_get_confluence_page",
+  "atlassian_search_cql"
 ];
 
 export const SUBAGENTS: Record<SubagentType, SubagentDef> = {
@@ -89,7 +87,7 @@ Return a concise summary suitable for another agent to build a report from: rele
     tools: ATLASSIAN_EXPLORE_TOOLS.concat(READ_ONLY_TOOLS),
     systemPrompt: `You are an Atlassian-exploration subagent. Your job is to find Jira issues and Confluence pages relevant to the spawn question, scoped to the projects/spaces the user connected in Settings → Integrations.
 
-Use atlassian_search_jql to find relevant Jira issues and atlassian_search_cql to find relevant Confluence pages. Use atlassian_get_jira_issue / atlassian_get_confluence_page to read a specific hit's full content when its search snippet needs more context. You are read-only — never suggest or attempt to create/edit anything.
+Use atlassian_search_jql to find relevant Jira issues and atlassian_search_cql to find relevant Confluence pages. You are read-only — never suggest or attempt to create/edit anything.
 
 If a tool returns an error about Atlassian not being connected, a product not being enabled, or nothing being selected, say so plainly and stop — do not retry. If only Jira or only Confluence is enabled, only use the corresponding tools.
 

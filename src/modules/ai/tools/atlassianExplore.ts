@@ -111,66 +111,6 @@ export function buildAtlassianExploreTools(_ctx: ToolContext) {
           return { error: String(e) };
         }
       },
-    }),
-
-    atlassian_get_jira_issue: tool({
-      description:
-        "Fetch one Jira issue's full details (including description) by key. Use after a search hit needs more context than its summary gives.",
-      inputSchema: z.object({
-        key: z.string().describe("Issue key, e.g. 'ENG-123'."),
-      }),
-      execute: async ({ key }) => {
-        const loaded = await loadAtlassianScope();
-        if (!loaded.ok) return { error: loaded.error };
-        if (!loaded.scope.jiraEnabled) {
-          return { error: "Jira is not enabled for this Atlassian connection." };
-        }
-        const projectKey = key.split("-")[0];
-        if (!loaded.scope.projects.includes(projectKey)) {
-          return {
-            error: `"${key}" is not in a connected project: ${loaded.scope.projects.join(", ")}.`,
-          };
-        }
-        try {
-          return await getJiraIssue(loaded.scope.creds, key);
-        } catch (e) {
-          return { error: String(e) };
-        }
-      },
-    }),
-
-    atlassian_get_confluence_page: tool({
-      description:
-        "Fetch one Confluence page's full body content by id. Use after a CQL search hit needs more context than its excerpt gives.",
-      inputSchema: z.object({
-        id: z.string().describe("Confluence page id, from a CQL search result."),
-      }),
-      execute: async ({ id }) => {
-        const loaded = await loadAtlassianScope();
-        if (!loaded.ok) return { error: loaded.error };
-        if (!loaded.scope.confluenceEnabled) {
-          return {
-            error: "Confluence is not enabled for this Atlassian connection.",
-          };
-        }
-        try {
-          // Unlike atlassian_get_jira_issue (whose project key is derivable
-          // from the issue key itself, so scope is checked before fetching),
-          // a Confluence page id doesn't encode its space — the space is
-          // only known once fetched. The scope check below still guarantees
-          // out-of-scope content is never returned to the model, it just
-          // can't happen before the request goes out.
-          const page = await getConfluencePage(loaded.scope.creds, id);
-          if (!loaded.scope.spaces.includes(page.spaceKey)) {
-            return {
-              error: `Page "${id}" is in space "${page.spaceKey}", which is not connected.`,
-            };
-          }
-          return page;
-        } catch (e) {
-          return { error: String(e) };
-        }
-      },
-    }),
+    })
   } as const;
 }
